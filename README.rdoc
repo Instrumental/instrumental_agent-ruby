@@ -6,14 +6,15 @@ Instrument anything.
 
 Add the gem to your Gemfile.
 
-  gem 'instrumental-agent'
+  gem 'instrumental_agent'
 
 Head over to instrumentalapp.com and setup an account, then 
 initialize the agent.
 
   I = Instrumental::Agent.new('YOUR_API_KEY')
 
-  # or, if you're using eventmachine already
+If you already use EventMachine elsewhere, or are hosted on heroku 
+then you will need to disable the reactor loop startup like so:
 
   I = Instrumental::Agent.new('YOUR_API_KEY', :start_reactor => false)
 
