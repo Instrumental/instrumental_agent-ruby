@@ -1,0 +1,35 @@
+= Instrumental Agent
+
+Instrument anything.
+
+== Setup
+
+Add the gem to your Gemfile.
+
+  gem 'instrumental-agent'
+
+Head over to instrumentalapp.com and setup an account, then 
+initialize the agent.
+
+  I = Instrumental::Agent.new('YOUR_API_KEY')
+
+  # or, if you're using eventmachine already
+
+  I = Instrumental::Agent.new('YOUR_API_KEY', :start_reactor => false)
+
+Now you can begin to use instrumental to track your application
+
+  I.gauge('load', 1.23)
+  I.increment('signups')
+
+Data without historical context sucks, so Instrumental lets you 
+backfill data to. Letting you see deep into your past.
+
+  User.find_each do |user|
+    I.increment('signups', 1, user.created_at)
+  end
+
+Running under Rails? You can also give our experimental rack middleware 
+a shot by initializing it with:
+
+    Instrumental::Middleware.boot

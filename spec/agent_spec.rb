@@ -1,0 +1,61 @@
+require 'spec_helper'
+
+describe Instrumental::Agent do
+  before do
+    random_port = Time.now.to_i % rand(2000)
+    base_port = 4000
+    @port = base_port + random_port
+    TestServer.start(@port)
+  end
+
+  after do
+    TestServer.stop
+  end
+
+  subject { Instrumental::Agent.new('test_token', :collector => "127.0.0.1:#{@port}") }
+
+  it 'should announce itself including version' do
+    subject.gauge('gauge_test', 123)
+    EM.next do
+      TestServer.last.buffer.first.should match(/hello.*version/)
+    end
+  end
+
+  it 'should authenticate using the token' do
+    subject.gauge('gauge_test', 123)
+    EM.next do
+      TestServer.last.buffer[1].should == "authenticate test_token"
+    end
+  end
+
+  it 'should report a gauge to the collector' do
+    now = Time.now
+    subject.gauge('gauge_test', 123)
+    EM.next do
+      TestServer.last.buffer.last.should == "gauge gauge_test 123 #{now.to_i}"
+    end
+  end
+
+  it 'should report a gauge to the collector with a set time' do
+    subject.gauge('gauge_test', 123, 555)
+    EM.next do
+      TestServer.last.buffer.last.should == 'gauge gauge_test 123 555'
+    end
+  end
+
+  it "should automatically reconnect" do
+    EM.next do
+      subject.gauge('gauge_test', 123, 555)
+    end
+    EM.next do
+      subject.connection.close_connection(false)
+    end
+    EM.next do
+      subject.gauge('gauge_test', 444, 555)
+    end
+    EM.next do
+      TestServer.last.buffer.last.should == 'gauge gauge_test 444 555'
+    end
+  end
+
+end
