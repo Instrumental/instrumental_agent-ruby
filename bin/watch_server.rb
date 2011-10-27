@@ -123,11 +123,85 @@ class SystemInspector
       end
     end
   end
+
+  module Linux
+    def self.load_cpu
+      output = { :gauges => {} }
+      output[:gauges].merge!(cpu)
+      output[:gauges].merge!(loadavg)
+      output
+    end
+
+    def self.cpu
+      cpu, user, nice, system, idle, iowait = `cat /proc/stat | grep cpu[^0-9]`.chomp.split(/\s+/)
+      total = user.to_i + system.to_i + idle.to_i + iowait.to_i
+      {
+        'cpu.user' => (user.to_f / total) * 100,
+        'cpu.system' => (system.to_f / total) * 100,
+        'cpu.idle' => (idle.to_f / total) * 100,
+        'cpu.iowait' => (iowait.to_f / total) * 100,
+      }
+    end
+
+    def self.loadavg
+      min_1, min_5, min_15 = `cat /proc/loadavg`.split(/\s+/)
+      {
+        'load.1min' => min_1.to_f,
+        'load.5min' => min_5.to_f,
+        'load.15min' => min_15.to_f,
+      }
+    end
+
+    def self.load_memory
+      output = { :gauges => {} }
+      output[:gauges].merge!(memory)
+      output[:gauges].merge!(swap)
+      output
+    end
+
+    def self.memory
+      _, total, used, free, shared, buffers, cached = `free -k -o | grep Mem`.chomp.split(/\s+/)
+      {
+        'memory.used_mb' => used.to_f / 1024,
+        'memory.free_mb' => free.to_f / 1024,
+        'memory.buffers_mb' => buffers.to_f / 1024,
+        'memory.cached_mb' => cached.to_f / 1024,
+        'memory.free_percent' => (free.to_f / total.to_f) * 100,
+      }
+    end
+
+    def self.swap
+      _, total, used, free = `free -k -o | grep Swap`.chomp.split(/\s+/)
+      {
+        'swap.used_mb' => used.to_f / 1024,
+        'swap.free_mb' => free.to_f / 1024,
+        'swap.free_percent' => (free.to_f / total.to_f) * 100,
+      }
+    end
+
+    def self.load_disks
+      { :gauges => disks }
+    end
+
+    def self.disks
+      output = {}
+      `df -Pk`.split("\n").grep(%r{^/dev/}).each do |line|
+        device, total, used, available, capacity, mount = line.split(/\s+/)
+        names = [File.basename(device)]
+        names << 'root' if mount == '/'
+        names.each do |name|
+          output["disk.#{name}.total_mb"] = total.to_f / 1024
+          output["disk.#{name}.used_mb"] = used.to_f / 1024
+          output["disk.#{name}.available_mb"] = available.to_f / 1024
+          output["disk.#{name}.available_percent"] = available.to_f / total.to_f * 100
+        end
+      end
+      output
+    end
+  end
 end
 
-# TODO: swap
 # TODO: utilization
-
 
 token, collector = *ARGV
 unless token
