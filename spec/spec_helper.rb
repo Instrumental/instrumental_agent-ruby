@@ -21,7 +21,6 @@ RSpec.configure do |config|
   end
 
   config.after(:all) do
-    EM.stop
   end
 
 end

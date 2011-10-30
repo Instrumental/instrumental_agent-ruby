@@ -9,7 +9,7 @@ require 'logger'
 module Instrumental
   class Agent
     attr_accessor :host, :port
-    attr_reader :connection
+    attr_reader :connection, :enabled
     
     def self.start_reactor
       unless EM.reactor_running?
@@ -98,7 +98,7 @@ module Instrumental
     #  Instrumental::Agent.new(API_KEY)
     #  Instrumental::Agent.new(API_KEY, :collector => 'hostname:port')
     def initialize(api_key, options = {})
-      default_options = { :start_reactor => true }
+      default_options = { :start_reactor => true, :enabled => true }
       options = default_options.merge(options)
       @api_key = api_key
       if options[:collector]
@@ -109,10 +109,16 @@ module Instrumental
         @port = 8000
       end
 
-      self.class.start_reactor if options[:start_reactor]
+      @enabled = options[:enabled]
 
-      EM.next_tick do
-        @connection = EM.connect host, port, ServerConnection, self, api_key
+      if @enabled
+        if options[:start_reactor]
+          self.class.start_reactor
+        end
+
+        EM.next_tick do
+          @connection = EM.connect host, port, ServerConnection, self, api_key
+        end
       end
     end
 
@@ -131,6 +137,10 @@ module Instrumental
     def increment(metric, value = 1, time = Time.now)
       valid?(metric, value, time)
       send_command("increment", metric, value, time.to_i)
+    end
+
+    def enabled?
+      @enabled
     end
 
     def connected?
@@ -158,10 +168,12 @@ module Instrumental
     end
 
     def send_command(cmd, *args)
-      cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
-      logger.debug "Sending: #{cmd.chomp}"
-      EM.next_tick do
-        connection.send_data(cmd)
+      if enabled?
+        cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
+        logger.debug "Sending: #{cmd.chomp}"
+        EM.next_tick do
+          connection.send_data(cmd)
+        end
       end
     end
 

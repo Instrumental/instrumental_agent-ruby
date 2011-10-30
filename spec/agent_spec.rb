@@ -1,5 +1,28 @@
 require 'spec_helper'
 
+describe Instrumental::Agent, "disabled" do
+  before do
+    random_port = Time.now.to_i % rand(2000)
+    base_port = 4000
+    @port = base_port + random_port
+    TestServer.start(@port)
+  end
+
+  after do
+    TestServer.stop
+  end
+
+  subject { Instrumental::Agent.new('test_token', :collector => "127.0.0.1:#{@port}", :enabled => false) }
+
+  it 'should not connect to the server' do
+    subject.gauge('gauge_test', 123)
+    EM.next do
+      TestServer.last.should be_nil
+    end
+  end
+
+end
+
 describe Instrumental::Agent do
   before do
     random_port = Time.now.to_i % rand(2000)
