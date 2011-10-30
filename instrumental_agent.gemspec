@@ -4,8 +4,8 @@ require "instrumental/version"
 Gem::Specification.new do |s|
   s.name        = "instrumental_agent"
   s.version     = Instrumental::VERSION
-  s.authors     = ["Elijah Miller", "Christopher Zelenak"]
-  s.email       = ["elijah.miller@gmail.com", "netshade@gmail.com"]
+  s.authors     = ["Elijah Miller", "Christopher Zelenak", "Kristopher Chambers"]
+  s.email       = ["elijah.miller@gmail.com", "netshade@gmail.com", 'kristopher.chambers@gmail.com']
   s.homepage    = "http://github.com/fastestforward/instrumental_agent"
   s.summary     = %q{Agent for reporting data to instrumentalapp.com}
   s.description = %q{Keep track of anything.}
