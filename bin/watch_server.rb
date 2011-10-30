@@ -221,5 +221,5 @@ loop do
     I.gauge("#{host}.#{stat}", value)
   end
   # I.increment("#{host}.#{stat}", delta)
-  sleep 1
+  sleep 10
 end
