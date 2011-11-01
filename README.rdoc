@@ -40,4 +40,4 @@ a shot by initializing it with:
 
 == Troubleshooting & Help
 
-We are here to help, please email us at support@instrumentalapp.com.
+We are here to help, please email us at mailto:support@instrumentalapp.com.
