@@ -66,6 +66,16 @@ describe Instrumental::Agent do
     end
   end
 
+  it 'should allow closing the connection to the server' do
+    ts = Time.now.to_i
+    1.upto(100) do |i|
+      subject.gauge('flush_test', 100, ts + i)
+    end
+    subject.close
+    TestServer.last_message.should == "gauge flush_test 100 #{ts + 100}"
+    subject.should_not be_connected
+  end
+
   it "should automatically reconnect" do
     EM.next do
       subject.gauge('gauge_test', 123, 555)
