@@ -30,19 +30,15 @@ module EM
 
   def self.next(&block)
     EM.wait_for_events
-    mtx = Mutex.new
     exc = nil
     EM.next_tick do
-      mtx.synchronize {
         begin
           yield
         rescue Exception => e
           exc = e
         end
-      }
     end
     EM.wait_for_events
-    mtx.lock
     raise exc if exc
     true
   end
