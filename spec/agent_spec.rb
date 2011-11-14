@@ -1,84 +1,88 @@
 require 'spec_helper'
 
+def wait
+  sleep 0.2 # FIXME: hack
+end
+
 describe Instrumental::Agent, "disabled" do
   before do
-    random_port = Time.now.to_i % rand(2000)
-    base_port = 4000
-    @port = base_port + random_port
-    TestServer.start(@port)
+    @server = TestServer.new
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :enabled => false)
   end
 
   after do
-    TestServer.stop
+    @server.stop
   end
 
-  subject { Instrumental::Agent.new('test_token', :collector => "127.0.0.1:#{@port}", :enabled => false) }
-
-  it 'should not connect to the server' do
-    subject.gauge('gauge_test', 123)
-    EM.next do
-      TestServer.last.should be_nil
-    end
+  it "should not connect to the server" do
+    wait
+    @server.connect_count.should == 0
   end
 
 end
 
-describe Instrumental::Agent do
+describe Instrumental::Agent, "enabled" do
   before do
-    random_port = Time.now.to_i % rand(2000)
-    base_port = 4000
-    @port = base_port + random_port
-    TestServer.start(@port)
+    @server = TestServer.new
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port)
   end
 
   after do
-    TestServer.stop
+    @server.stop
   end
 
-  subject { Instrumental::Agent.new('test_token', :collector => "127.0.0.1:#{@port}") }
-
-  it 'should announce itself including version' do
-    subject.gauge('gauge_test', 123)
-    EM.next do
-      TestServer.last.buffer.first.should match(/hello.*version/)
-    end
+  it "should connect to the server" do
+    wait
+    @server.connect_count.should == 1
   end
 
-  it 'should authenticate using the token' do
-    subject.gauge('gauge_test', 123)
-    EM.next do
-      TestServer.last.buffer[1].should == "authenticate test_token"
-    end
+  it "should announce itself, and include version" do
+    wait
+    @server.commands[0].should =~ /hello .*version /
   end
 
-  it 'should report a gauge to the collector' do
+  it "should authenticate using the token" do
+    wait
+    @server.commands[1].should == "authenticate test_token"
+  end
+
+  it "should report a gauge" do
     now = Time.now
-    subject.gauge('gauge_test', 123)
-    EM.next do
-      TestServer.last.buffer.last.should == "gauge gauge_test 123 #{now.to_i}"
-    end
+    @agent.gauge('gauge_test', 123)
+    wait
+    @server.commands.last.should == "gauge gauge_test 123 #{now.to_i}"
   end
 
-  it 'should report a gauge to the collector with a set time' do
-    subject.gauge('gauge_test', 123, 555)
-    EM.next do
-      TestServer.last.buffer.last.should == 'gauge gauge_test 123 555'
-    end
+  it "should report a gauge with a set time" do
+    @agent.gauge('gauge_test', 123, 555)
+    wait
+    @server.commands.last.should == "gauge gauge_test 123 555"
+  end
+
+  it "should report an increment" do
+    now = Time.now
+    @agent.increment("increment_test")
+    wait
+    @server.commands.last.should == "increment increment_test 1 #{now.to_i}"
+  end
+
+  it "should report an increment a value" do
+    now = Time.now
+    @agent.increment("increment_test", 2)
+    wait
+    @server.commands.last.should == "increment increment_test 2 #{now.to_i}"
+  end
+
+  it "should report an increment with a set time" do
+    @agent.increment('increment_test', 1, 555)
+    wait
+    @server.commands.last.should == "increment increment_test 1 555"
   end
 
   it "should automatically reconnect" do
-    EM.next do
-      subject.gauge('gauge_test', 123, 555)
-    end
-    EM.next do
-      subject.connection.close_connection(false)
-    end
-    EM.next do
-      subject.gauge('gauge_test', 444, 555)
-    end
-    EM.next do
-      TestServer.last.buffer.last.should == 'gauge gauge_test 444 555'
-    end
+    wait
+    @server.disconnect_all
+    wait
+    @server.connect_count.should == 2
   end
-
 end
