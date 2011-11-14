@@ -1,4 +1,4 @@
-require 'instrumental/setup'
+require 'instrumental/rack/middleware'
 require 'instrumental/version'
 require 'eventmachine'
 require 'logger'
