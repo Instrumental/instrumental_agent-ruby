@@ -82,7 +82,9 @@ describe Instrumental::Agent, "enabled" do
   it "should automatically reconnect" do
     wait
     @server.disconnect_all
+    @agent.increment('reconnect_test', 1, 1234) # triggers reconnect
     wait
     @server.connect_count.should == 2
+    @server.commands.last.should == "increment reconnect_test 1 1234"
   end
 end

@@ -133,12 +133,12 @@ module Instrumental
           @socket.puts "hello version 0.0"
           @socket.puts "authenticate #{@api_key}"
           loop do
+            command_and_args = @queue.pop
             begin
               test_server_connection
-              command_and_args = @queue.pop(true)
-            rescue ThreadError => err
-              sleep 0.1 # FIXME: lame
-              next
+            rescue Exception => err
+              @queue << command_and_args # connection dead, requeue
+              raise err
             end
 
             if command_and_args == 'exit'
