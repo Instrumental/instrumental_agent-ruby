@@ -158,13 +158,12 @@ module Instrumental
           sleep delay
           retry
         end
-
-        at_exit do
-          if !@queue.empty? && @thread.alive?
-            logger.info "exit received, #{@queue.size} commands to be sent"
-            @queue << 'exit'
-            @thread.join
-          end
+      end
+      at_exit do
+        if !@queue.empty? && @thread.alive?
+          logger.info "exit received, #{@queue.size} commands to be sent"
+          @queue << 'exit'
+          @thread.join
         end
       end
     end
