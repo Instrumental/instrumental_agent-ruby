@@ -161,9 +161,14 @@ module Instrumental
       end
       at_exit do
         if !@queue.empty? && @thread.alive?
-          logger.info "exit received, #{@queue.size} commands to be sent"
-          @queue << 'exit'
-          @thread.join
+          if @failures > 0
+            logger.info "exit received but disconnected, dropping #{@queue.size} commands"
+            @thread.kill
+          else
+            logger.info "exit received, #{@queue.size} commands to be sent"
+            @queue << 'exit'
+            @thread.join
+          end
         end
       end
     end
