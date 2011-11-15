@@ -19,6 +19,13 @@ describe Instrumental::Agent, "disabled" do
     @server.connect_count.should == 0
   end
 
+  it "should not connect to the server" do
+    wait
+    @agent.gauge('disabled_test', 1)
+    wait
+    @server.connect_count.should == 0
+  end
+
 end
 
 describe Instrumental::Agent, "enabled" do
