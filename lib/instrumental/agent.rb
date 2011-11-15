@@ -22,7 +22,6 @@ module Instrumental
 
     def self.logger
       @logger ||= Logger.new('/dev/null')
-      # @logger ||= Logger.new(STDOUT)
     end
 
     def self.all
@@ -152,7 +151,7 @@ module Instrumental
           end
         rescue Exception => err
           logger.error err.to_s
-          #FIXME: not always a disconnect
+          # FIXME: not always a disconnect
           @failures += 1
           delay = [@failures ** BACKOFF / 10.to_f, MAX_RECONNECT_DELAY].min
           logger.info "disconnected, reconnect in #{delay}..."
