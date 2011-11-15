@@ -1,85 +1,54 @@
-module TestServer
-  CMUTEX = Mutex.new
+class TestServer
+  attr_accessor :host, :port, :connect_count, :commands
 
-  def self.start_reactor
-    Thread.new { EM.run } unless EM.reactor_running?
+  def initialize
+    @connect_count = 0
+    @connections = []
+    @commands = []
+    listen
   end
 
-  def self.start(port)
-    start_reactor
-    unless @sig
-      EM.next_tick {
-        @sig = EventMachine.start_server "127.0.0.1", port, TestServer
-      }
+  def listen
+    @port ||= 10001
+    @server = TCPServer.new(port)
+    Thread.new do
+      begin
+        # puts "listening"
+        socket = @server.accept
+        @connect_count += 1
+        @connections << socket
+        # puts "connection received"
+        loop do
+          command = socket.gets.strip
+          # puts "got: #{command}"
+          commands << command
+        end
+      rescue Exception => err
+        unless @stopping
+          # puts "EXCEPTION:", err unless @stopping
+          retry
+        end
+      end
     end
+    # puts "server up"
+  rescue Exception => err
+    # FIXME: doesn't seem to be detecting failures of listen
+    puts "failed to get port"
+    @port += 1
+    retry
   end
 
-  def self.stop
-    if (sig=@sig)
-      EM.next_tick {
-        EventMachine.stop_server sig
-      }
-      @sig = nil
-    end
+  def host_and_port
+    "#{host}:#{port}"
   end
 
-  def self.connections
-    CMUTEX.synchronize do 
-      @connections ||= []
-      @connections.dup
-    end
+  def stop
+    @stopping = true
+    disconnect_all
+    @server.close # FIXME: necessary?
   end
 
-  def self.add_connection(conn)
-    CMUTEX.synchronize do
-      @connections ||= []
-      @connections << conn
-    end
-  end
-
-  def self.remove_connection(conn)
-    CMUTEX.synchronize do
-      @connections ||= []
-      @connections.delete(conn)
-    end
-  end
-
-  def self.last
-    connections.last
-  end
-
-  def post_init
-    TestServer.add_connection(self)
-  end
-
-  def receive_data data
-    buffer_response(data)
-  end
-
-  def unbind
-    TestServer.remove_connection(self)
-  end
-
-  def last_message
-    buffer.last
-  end
-
-  def buffer
-    @buffer ||= []
-    @buffer.dup
-  end
-
-  def clear_buffer!
-    @buffer = []
-  end
-
-  def buffer_response(dt)
-    @buffer ||= []
-    dt.split(/\n/).each do |measurement|
-      @buffer << measurement
-    end
-    dt
+  def disconnect_all
+    @connections.each { |c| c.close rescue false }
   end
 end
-
-
