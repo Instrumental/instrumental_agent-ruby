@@ -9,8 +9,8 @@ require 'socket'
 #  Instrumental::Agent.new(API_KEY)
 module Instrumental
   class Agent
-    BACKOFF = 2
-    MAX_RECONNECT_DELAY = 5
+    BACKOFF = 2.0
+    MAX_RECONNECT_DELAY = 15
     MAX_BUFFER = 100
 
     attr_accessor :host, :port
@@ -153,7 +153,7 @@ module Instrumental
           logger.error err.to_s
           # FIXME: not always a disconnect
           @failures += 1
-          delay = [@failures ** BACKOFF / 10.to_f, MAX_RECONNECT_DELAY].min
+          delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
           logger.info "disconnected, reconnect in #{delay}..."
           sleep delay
           retry
