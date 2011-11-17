@@ -40,7 +40,7 @@ module Instrumental
     #  Instrumental::Agent.new(API_KEY, :collector => 'hostname:port')
     def initialize(api_key, options = {})
       default_options = {
-        :collector => 'instrumentalapp.com:8000'
+        :collector => 'instrumentalapp.com:8000',
         :enabled   => true,
         :test_mode => false,
       }
