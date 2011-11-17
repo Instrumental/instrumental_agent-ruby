@@ -40,21 +40,19 @@ module Instrumental
     #  Instrumental::Agent.new(API_KEY, :collector => 'hostname:port')
     def initialize(api_key, options = {})
       default_options = {
+        :collector => 'instrumentalapp.com:8000'
         :enabled   => true,
         :test_mode => false,
       }
-      options = default_options.merge(options)
-      @api_key = api_key
-      if options[:collector]
-        @host, @port = options[:collector].split(':')
-        @port = (@port || 8000).to_i
-      else
-        @host = 'instrumentalapp.com'
-        @port = 8000
-      end
+      options   = default_options.merge(options)
+      collector = options[:collector].split(':')
 
-      @enabled = options[:enabled]
+      @api_key   = api_key
+      @host      = collector[0]
+      @port      = (collector[1] || 8000).to_i
+      @enabled   = options[:enabled]
       @test_mode = options[:test_mode]
+
       if @enabled
         @failures = 0
         @queue = Queue.new
