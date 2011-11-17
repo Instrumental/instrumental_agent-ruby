@@ -60,6 +60,13 @@ describe Instrumental::Agent, "enabled" do
     @server.commands.last.should == "gauge gauge_test 123 #{now.to_i}"
   end
 
+  it "should return the value gauged" do
+    now = Time.now
+    @agent.gauge('gauge_test', 123).should == 123
+    @agent.gauge('gauge_test', 989).should == 989
+    wait
+  end
+
   it "should report a gauge with a set time" do
     @agent.gauge('gauge_test', 123, 555)
     wait
@@ -71,6 +78,13 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment("increment_test")
     wait
     @server.commands.last.should == "increment increment_test 1 #{now.to_i}"
+  end
+
+  it "should return the value incremented by" do
+    now = Time.now
+    @agent.increment("increment_test").should == 1
+    @agent.increment("increment_test", 5).should == 5
+    wait
   end
 
   it "should report an increment a value" do
@@ -93,5 +107,22 @@ describe Instrumental::Agent, "enabled" do
     wait
     @server.connect_count.should == 2
     @server.commands.last.should == "increment reconnect_test 1 1234"
+  end
+
+  it "should never let an exception reach the user" do
+    @agent.stub!(:send_command).and_raise(Exception.new("Test Exception"))
+    @agent.increment('throws_exception', 2).should be_nil
+    wait
+    @agent.gauge('throws_exception', 234).should be_nil
+    wait
+  end
+
+  it "should return nil if the user overflows the MAX_BUFFER" do
+    thread = @agent.instance_variable_get(:@thread)
+    thread.kill
+    1.upto(Instrumental::Agent::MAX_BUFFER) do
+      @agent.increment("test").should == 1
+    end
+    @agent.increment("test").should be_nil
   end
 end
