@@ -62,20 +62,30 @@ module Instrumental
     #
     #  agent.gauge('load', 1.23)
     def gauge(metric, value, time = Time.now)
-      if valid?(metric, value, time)
-        send_command("gauge", metric, value, time.to_i)
+      if valid?(metric, value, time) &&
+          send_command("gauge", metric, value, time.to_i)
+        value
+      else
+        nil
       end
-      value
+    rescue Exception => e
+      report_exception(e)
+      nil
     end
 
     # Increment a metric, optionally more than one or at a specific time.
     #
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now)
-      if valid?(metric, value, time)
-        send_command("increment", metric, value, time.to_i)
+      if valid?(metric, value, time) && 
+          send_command("increment", metric, value, time.to_i)
+        value
+      else
+        nil
       end
-      value
+    rescue Exception => e
+      report_exception(e)
+      nil
     end
 
     def enabled?
@@ -106,6 +116,11 @@ module Instrumental
       true
     end
 
+    def report_exception(e)
+      logger.error "Exception occurred: #{e.message}"
+      logger.error e.backtrace.join("\n")
+    end
+
     def send_command(cmd, *args)
       if enabled?
         cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
@@ -118,10 +133,6 @@ module Instrumental
           nil
         end
       end
-    rescue Exception => e
-      logger.error "Exception occurred: #{e.message}"
-      logger.error e.backtrace.join("\n")
-      nil
     end
 
     def test_server_connection
