@@ -64,17 +64,30 @@ module Instrumental
     #
     #  agent.gauge('load', 1.23)
     def gauge(metric, value, time = Time.now)
-      if valid?(metric, value, time)
-        send_command("gauge", metric, value, time.to_i)
+      if valid?(metric, value, time) &&
+          send_command("gauge", metric, value, time.to_i)
+        value
+      else
+        nil
       end
+    rescue Exception => e
+      report_exception(e)
+      nil
     end
 
     # Increment a metric, optionally more than one or at a specific time.
     #
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now)
-      valid?(metric, value, time)
-      send_command("increment", metric, value, time.to_i)
+      if valid?(metric, value, time) &&
+          send_command("increment", metric, value, time.to_i)
+        value
+      else
+        nil
+      end
+    rescue Exception => e
+      report_exception(e)
+      nil
     end
 
     def enabled?
@@ -105,14 +118,21 @@ module Instrumental
       true
     end
 
+    def report_exception(e)
+      logger.error "Exception occurred: #{e.message}"
+      logger.error e.backtrace.join("\n")
+    end
+
     def send_command(cmd, *args)
       if enabled?
         cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
         if @queue.size < MAX_BUFFER
           logger.debug "Queueing: #{cmd.chomp}"
           @queue << cmd
+          cmd
         else
           logger.warn "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
+          nil
         end
       end
     end
@@ -127,12 +147,13 @@ module Instrumental
     end
 
     def start_connection_thread
+      logger.info "Starting thread"
       @thread = Thread.new do
         begin
           @socket = TCPSocket.new(host, port)
           @failures = 0
           logger.info "connected to collector"
-          @socket.puts "hello version 0.0 test_mode #{@test_mode}"
+          @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
           @socket.puts "authenticate #{@api_key}"
           loop do
             command_and_args = @queue.pop
@@ -145,6 +166,7 @@ module Instrumental
 
             if command_and_args == 'exit'
               logger.info "exiting, #{@queue.size} commands remain"
+              @socket.flush
               Thread.exit
             else
               logger.debug "Sending: #{command_and_args.chomp}"
