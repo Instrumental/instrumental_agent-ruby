@@ -15,7 +15,7 @@ module Instrumental
 
     attr_accessor :host, :port
     attr_reader :connection, :enabled
-    
+
     def self.logger=(l)
       @logger = l
     end
@@ -177,4 +177,5 @@ module Instrumental
       end
     end
   end
+
 end
