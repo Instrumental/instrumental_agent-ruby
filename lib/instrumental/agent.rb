@@ -77,7 +77,7 @@ module Instrumental
     #
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now)
-      if valid?(metric, value, time) && 
+      if valid?(metric, value, time) &&
           send_command("increment", metric, value, time.to_i)
         value
       else
