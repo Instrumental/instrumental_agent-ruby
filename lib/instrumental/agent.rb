@@ -20,8 +20,8 @@ module Instrumental
       @logger = l
     end
 
-    def self.logger
-      @logger ||= Logger.new('/dev/null')
+    def self.logger(force = false)
+      @logger ||= Logger.new(File.open('/dev/null', 'a')) # append mode so it's forksafe
     end
 
     def self.all
@@ -52,6 +52,8 @@ module Instrumental
       @port      = (collector[1] || 8000).to_i
       @enabled   = options[:enabled]
       @test_mode = options[:test_mode]
+      @pid = Process.pid
+
 
       if @enabled
         @failures = 0
@@ -147,6 +149,14 @@ module Instrumental
 
     def send_command(cmd, *args)
       if enabled?
+        if @pid != Process.pid
+          logger.info "Detected fork"
+          @pid = Process.pid
+          disconnect(false)
+          @queue = Queue.new
+          connect
+        end
+
         cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
         if @queue.size < MAX_BUFFER
           logger.debug "Queueing: #{cmd.chomp}"
@@ -173,7 +183,7 @@ module Instrumental
       logger.info "connecting to collector"
       @socket = TCPSocket.new(host, port)
       @failures = 0
-      logger.info "connected to collector"
+      logger.info "connected to collector at #{host}:#{port}"
       @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       @socket.puts "authenticate #{@api_key}"
       loop do
