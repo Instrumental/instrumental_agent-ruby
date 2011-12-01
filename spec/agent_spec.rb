@@ -156,9 +156,12 @@ describe Instrumental::Agent, "enabled" do
       @agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
     end
     wait
+    @agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
+    wait
     @server.connect_count.should == 2
     @server.commands.should include("increment fork_reconnect_test 1 2")
     @server.commands.should include("increment fork_reconnect_test 1 3")
+    @server.commands.should include("increment fork_reconnect_test 1 4")
   end
 
   it "should never let an exception reach the user" do
