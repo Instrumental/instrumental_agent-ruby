@@ -58,7 +58,7 @@ module Instrumental
       if @enabled
         @failures = 0
         @queue = Queue.new
-        connect
+        start_connection_worker
         setup_cleanup_at_exit
       end
     end
@@ -105,27 +105,6 @@ module Instrumental
       self.class.logger
     end
 
-    def disconnect(flush = true)
-      if connected?
-        logger.info "Disconnecting..."
-        @socket.flush if flush
-        @socket.close
-      end
-      @socket = nil
-    end
-
-    def connect
-      if enabled?
-        disconnect
-        logger.info "Starting thread"
-        @thread = Thread.new do
-          loop do
-            break if connection_worker
-          end
-        end
-      end
-    end
-
     private
 
     def valid?(metric, value, time)
@@ -152,9 +131,9 @@ module Instrumental
         if @pid != Process.pid
           logger.info "Detected fork"
           @pid = Process.pid
-          disconnect(false)
+          @socket = nil
           @queue = Queue.new
-          connect
+          start_connection_worker
         end
 
         cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
@@ -175,6 +154,18 @@ module Instrumental
         @socket.read_nonblock(1) # TODO: put data back?
       rescue Errno::EAGAIN
         # nop
+      end
+    end
+
+    def start_connection_worker
+      if enabled?
+        disconnect
+        logger.info "Starting thread"
+        @thread = Thread.new do
+          loop do
+            break if connection_worker
+          end
+        end
       end
     end
 
@@ -230,6 +221,16 @@ module Instrumental
         end
       end
     end
+
+    def disconnect
+      if connected?
+        logger.info "Disconnecting..."
+        @socket.flush
+        @socket.close
+      end
+      @socket = nil
+    end
+
   end
 
 end
