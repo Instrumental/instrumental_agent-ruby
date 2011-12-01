@@ -19,7 +19,7 @@ describe Instrumental::Agent, "disabled" do
     @server.connect_count.should == 0
   end
 
-  it "should not connect to the server" do
+  it "should not connect to the server after receiving a metric" do
     wait
     @agent.gauge('disabled_test', 1)
     wait

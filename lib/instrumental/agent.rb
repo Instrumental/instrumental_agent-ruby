@@ -56,7 +56,8 @@ module Instrumental
       if @enabled
         @failures = 0
         @queue = Queue.new
-        start_connection_thread
+        connect
+        setup_cleanup_at_exit
       end
     end
 
@@ -95,11 +96,32 @@ module Instrumental
     end
 
     def connected?
-      connection && connection.connected
+      @socket && !@socket.closed?
     end
 
     def logger
       self.class.logger
+    end
+
+    def disconnect(flush = true)
+      if connected?
+        logger.info "Disconnecting..."
+        @socket.flush if flush
+        @socket.close
+      end
+      @socket = nil
+    end
+
+    def connect
+      if enabled?
+        disconnect
+        logger.info "Starting thread"
+        @thread = Thread.new do
+          loop do
+            break if connection_worker
+          end
+        end
+      end
     end
 
     private
@@ -137,7 +159,7 @@ module Instrumental
       end
     end
 
-    def test_server_connection
+    def test_connection
       # FIXME: Test connection state hack
       begin
         @socket.read_nonblock(1) # TODO: put data back?
@@ -146,43 +168,45 @@ module Instrumental
       end
     end
 
-    def start_connection_thread
-      logger.info "Starting thread"
-      @thread = Thread.new do
-        begin
-          @socket = TCPSocket.new(host, port)
-          @failures = 0
-          logger.info "connected to collector"
-          @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
-          @socket.puts "authenticate #{@api_key}"
-          loop do
-            command_and_args = @queue.pop
-            begin
-              test_server_connection
-            rescue Exception => err
-              @queue << command_and_args # connection dead, requeue
-              raise err
-            end
+    def connection_worker
+      command_and_args = nil
+      logger.info "connecting to collector"
+      @socket = TCPSocket.new(host, port)
+      @failures = 0
+      logger.info "connected to collector"
+      @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
+      @socket.puts "authenticate #{@api_key}"
+      loop do
+        command_and_args = @queue.pop
+        test_connection
 
-            if command_and_args == 'exit'
-              logger.info "exiting, #{@queue.size} commands remain"
-              @socket.flush
-              Thread.exit
-            else
-              logger.debug "Sending: #{command_and_args.chomp}"
-              @socket.puts command_and_args
-            end
-          end
-        rescue Exception => err
-          logger.error err.to_s
-          # FIXME: not always a disconnect
-          @failures += 1
-          delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
-          logger.info "disconnected, reconnect in #{delay}..."
-          sleep delay
-          retry
+        case command_and_args
+        when 'exit'
+          logger.info "exiting, #{@queue.size} commands remain"
+          return true
+        else
+          logger.debug "Sending: #{command_and_args.chomp}"
+          @socket.puts command_and_args
+          command_and_args = nil
         end
       end
+    rescue Exception => err
+      logger.error err.to_s
+      if command_and_args
+        logger.debug "requeueing: #{command_and_args}"
+        @queue << command_and_args 
+      end
+      disconnect
+      @failures += 1
+      delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
+      logger.info "disconnected, reconnect in #{delay}..."
+      sleep delay
+      retry
+    ensure
+      disconnect
+    end
+
+    def setup_cleanup_at_exit
       at_exit do
         if !@queue.empty? && @thread.alive?
           if @failures > 0
