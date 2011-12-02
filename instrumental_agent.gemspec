@@ -20,4 +20,5 @@ Gem::Specification.new do |s|
   s.add_development_dependency(%q<guard-rspec>, [">= 0"])
   s.add_development_dependency(%q<growl_notify>, [">= 0"])
   s.add_development_dependency(%q<rb-fsevent>, [">= 0"])
+  s.add_development_dependency(%q<fuubar>, [">= 0"])
 end
