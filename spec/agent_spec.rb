@@ -4,10 +4,10 @@ def wait
   sleep 0.2 # FIXME: hack
 end
 
-describe Instrumental::Agent, "disabled" do
+describe Agent, "disabled" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :enabled => false)
+    @agent = Agent.new('test_token', :collector => @server.host_and_port, :enabled => false)
   end
 
   after do
@@ -28,10 +28,10 @@ describe Instrumental::Agent, "disabled" do
 
 end
 
-describe Instrumental::Agent, "enabled in test_mode" do
+describe Agent, "enabled in test_mode" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :test_mode => true)
+    @agent = Agent.new('test_token', :collector => @server.host_and_port, :test_mode => true)
   end
 
   after do
@@ -68,10 +68,10 @@ describe Instrumental::Agent, "enabled in test_mode" do
   end
 end
 
-describe Instrumental::Agent, "enabled" do
+describe Agent, "enabled" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port)
+    @agent = Agent.new('test_token', :collector => @server.host_and_port)
   end
 
   after do
@@ -175,7 +175,7 @@ describe Instrumental::Agent, "enabled" do
   it "should return nil if the user overflows the MAX_BUFFER" do
     thread = @agent.instance_variable_get(:@thread)
     thread.kill
-    1.upto(Instrumental::Agent::MAX_BUFFER) do
+    1.upto(Agent::MAX_BUFFER) do
       @agent.increment("test").should == 1
     end
     @agent.increment("test").should be_nil
