@@ -193,14 +193,19 @@ module Instrumental
       @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       @socket.puts "authenticate #{@api_key}"
       command, *args = @socket.gets.split(' ')
+      options = {
+        'resolution' => INITIAL_METRIC_BUFFER_RESOLUTION,
+        'flush_interval' => INITIAL_FLUSH_INTERVAL,
+      }
       case command
       when 'options'
-        options = Hash[*args]
-        logger.debug "Server supplied options: #{options.inspect}"
-        @buffer.resolution = (options['resolution'] || INITIAL_METRIC_BUFFER_RESOLUTION).to_i
-        @flush_interval = (options['flush_interval'] || INITIAL_FLUSH_INTERVAL).to_f
+        server_options = Hash[*args]
+        logger.debug "Server supplied options: #{server_options.inspect}"
+        options.merge!(server_options)
       else
       end
+      @buffer.resolution = options['resolution'].to_i
+      @flush_interval = options['flush_interval'].to_f
       @flusher = Thread.new { loop { sleep @flush_interval; @buffer.flush! } }
       loop do
         command_and_args = @queue.pop
