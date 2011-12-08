@@ -1,3 +1,7 @@
 #!/usr/bin/env ruby
 
-puts 'Moved; install instrumental_tools (github.com/fastestforward/instrumental_tools) for access to this and other useful tools.'
+puts '***********************************'
+puts '*** Moved to instrumental_tools ***'
+puts '***********************************'
+puts "\ngem install instrumental_tools\n"
+exit 1
