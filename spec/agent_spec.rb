@@ -160,7 +160,7 @@ describe Instrumental::Agent, "enabled" do
       5.times do |i|
         @agent.increment('overflow_test', i + 1, 300)
       end
-      wait
+      wait # let the server receive the commands
       @server.commands.should include("increment overflow_test 1 300")
       @server.commands.should include("increment overflow_test 2 300")
       @server.commands.should include("increment overflow_test 3 300")
