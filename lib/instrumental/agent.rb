@@ -112,17 +112,24 @@ module Instrumental
     private
 
     def valid?(metric, value, time)
-      if metric !~ /^([\d\w\-_]+\.)*[\d\w\-_]+$/i
-        increment 'agent.invalid_metric'
-        logger.warn "Invalid metric #{metric}"
-        return false
-      end
-      if value.to_s !~ /^\d+(\.\d+)?$/
-        increment 'agent.invalid_value'
-        logger.warn "Invalid value #{value.inspect} for #{metric}"
-        return false
-      end
-      true
+      valid_metric = metric =~ /^([\d\w\-_]+\.)*[\d\w\-_]+$/i
+      valid_value  = value.to_s =~ /^-?\d+(\.\d+)?$/
+
+      return true if valid_metric && valid_value
+
+      report_invalid_metric(metric) unless valid_metric
+      report_invalid_value(metric, value) unless valid_value
+      false
+    end
+
+    def report_invalid_metric(metric)
+      increment "agent.invalid_metric"
+      logger.warn "Invalid metric #{metric}"
+    end
+
+    def report_invalid_value(metric, value)
+      increment "agent.invalid_value"
+      logger.warn "Invalid value #{value.inspect} for #{metric}"
     end
 
     def report_exception(e)

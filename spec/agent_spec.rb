@@ -188,6 +188,15 @@ describe Instrumental::Agent, "enabled" do
     @server.commands.join("\n").should include("increment agent.invalid_metric")
   end
 
+  it "should allow reasonable metric names" do
+    @agent.increment('a')
+    @agent.increment('a.b')
+    @agent.increment('hello.world')
+    @agent.increment('ThisIsATest.Of.The.Emergency.Broadcast.System.12345')
+    wait
+    @server.commands.join("\n").should_not include("increment agent.invalid_metric")
+  end
+
   it "should track invalid values" do
     @agent.logger.should_receive(:warn).with(/hello.*testington/)
     @agent.increment('testington', 'hello')
@@ -195,4 +204,15 @@ describe Instrumental::Agent, "enabled" do
     @server.commands.join("\n").should include("increment agent.invalid_value")
   end
 
+  it "should allow reasonable values" do
+    @agent.increment('a', -333.333)
+    @agent.increment('a', -2.2)
+    @agent.increment('a', -1)
+    @agent.increment('a',  0)
+    @agent.increment('a',  1)
+    @agent.increment('a',  2.2)
+    @agent.increment('a',  333.333)
+    wait
+    @server.commands.join("\n").should_not include("increment agent.invalid_value")
+  end
 end
