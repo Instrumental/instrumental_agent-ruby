@@ -180,4 +180,19 @@ describe Instrumental::Agent, "enabled" do
     end
     @agent.increment("test").should be_nil
   end
+
+  it "should track invalid metrics" do
+    @agent.logger.should_receive(:warn).with(/%%/)
+    @agent.increment(' %% .!#@$%^&*', 1, 1)
+    wait
+    @server.commands.join("\n").should include("increment agent.invalid_metric")
+  end
+
+  it "should track invalid values" do
+    @agent.logger.should_receive(:warn).with(/hello.*testington/)
+    @agent.increment('testington', 'hello')
+    wait
+    @server.commands.join("\n").should include("increment agent.invalid_value")
+  end
+
 end
