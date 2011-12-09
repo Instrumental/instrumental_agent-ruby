@@ -101,8 +101,12 @@ module Instrumental
       @socket && !@socket.closed?
     end
 
+    def logger=(logger)
+      @logger = logger
+    end
+
     def logger
-      self.class.logger
+      @logger ||= self.class.logger
     end
 
     private
