@@ -1,7 +1,0 @@
-#!/usr/bin/env ruby
-
-puts '***********************************'
-puts '*** Moved to instrumental_tools ***'
-puts '***********************************'
-puts "\ngem install instrumental_tools\n"
-exit 1
