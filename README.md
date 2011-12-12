@@ -35,9 +35,10 @@ User.find_each do |user|
 end
 ```
 
-Want some general server stats (load, memory, etc.)? Run this command, sorry not daemonized yet :)
+Want some general server stats (load, memory, etc.)? Install instrumental_tools and run this command (sorry not daemonized yet :)
 
 ```sh
+gem install instrumental_tools
 instrument_server
 ```
 
