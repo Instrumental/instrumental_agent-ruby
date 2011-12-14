@@ -99,6 +99,7 @@ module Instrumental
     def notice(note, time = Time.now, duration = 0)
       if valid_note?(note)
         send_command("notice", time.to_i, duration.to_i, note)
+        note
       else
         nil
       end
