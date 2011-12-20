@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.email       = ["support@instrumentalapp.com"]
   s.homepage    = "http://github.com/fastestforward/instrumental_agent"
   s.summary     = %q{Agent for reporting data to instrumentalapp.com}
-  s.description = %q{Keep track of anything.}
+  s.description = %q{Track anything.}
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
