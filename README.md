@@ -75,15 +75,6 @@ gem install instrumental_tools
 instrument_server
 ```
 
-## Rack middleware
-
-Running under Rails? You can also give our experimental Rack middleware 
-a shot by initializing it with:
-
-```sh
-Instrumental::Middleware.boot
-```
-
 Need to quickly disable the agent? set :enabled to false on
 initialization and you don't need to change any application code.
 
