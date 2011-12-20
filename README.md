@@ -34,6 +34,14 @@ from any problems our service might suffer. If it is unable to connect
 to the service, it will discard data after reaching a low memory
 threshold.
 
+Want to track an event (like an application deploy, or downtime)? You can capture events that
+are instantaneous, or events that happen over a period of time.
+
+```sh
+I.notice('Jeffy deployed rev ef3d6a') # instantaneous event
+I.notice('Testing socket buffer increase', 3.days.ago, 20.minutes) # an event with a duration
+```
+
 ## Backfilling
 
 Streaming data is better with a little historical context. Instrumental
@@ -54,14 +62,6 @@ I.synchronous = true # every command sends immediately
 User.find_each do |user|
   I.increment('signups', 1, user.created_at)
 end
-```
-
-Want to track an event (like an application deploy, or downtime)? You can capture events that
-are instantaneous, or events that happen over a period of time.
-
-```sh
-I.notice('Jeffy deployed rev ef3d6a') # instantaneous event
-I.notice('Testing socket buffer increase', 3.days.ago, 20.minutes) # an event with a duration
 ```
 
 ## Server stats
