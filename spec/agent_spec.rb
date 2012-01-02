@@ -79,7 +79,7 @@ end
 describe Instrumental::Agent, "enabled" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
   end
 
   after do
@@ -264,5 +264,26 @@ describe Instrumental::Agent, "enabled" do
     @agent.notice("Test note\n").should be_nil
     wait
     @server.commands.join("\n").should_not include("notice Test note")
+  end
+end
+
+describe Instrumental::Agent, "enabled with sync option" do
+  before do
+    @server = TestServer.new
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => true)
+  end
+
+  it "should send all data in synchronous mode" do
+    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+      5.times do |i|
+        @agent.increment('overflow_test', i + 1, 300)
+      end
+      wait # let the server receive the commands
+      @server.commands.should include("increment overflow_test 1 300")
+      @server.commands.should include("increment overflow_test 2 300")
+      @server.commands.should include("increment overflow_test 3 300")
+      @server.commands.should include("increment overflow_test 4 300")
+      @server.commands.should include("increment overflow_test 5 300")
+    end
   end
 end
