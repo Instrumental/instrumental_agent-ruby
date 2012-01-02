@@ -64,7 +64,7 @@ User.find_each do |user|
 end
 ```
 
-## Server stats
+## Server Stats
 
 Want some general server stats (load, memory, etc.)? Check out the
 [instrumental_tools](https://github.com/fastestforward/instrumental_tools)
@@ -75,6 +75,7 @@ gem install instrumental_tools
 instrument_server
 ```
 
+## Agent Control
 
 Need to quickly disable the agent? set :enabled to false on
 initialization and you don't need to change any application code.
