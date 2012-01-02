@@ -22,7 +22,7 @@ defined?(Capistrano) && Capistrano::Configuration.instance.load do
       agent_options[:collector] = instrumental_host if exists?(:instrumental_host)
       agent = Instrumental::Agent.new(instrumental_key, agent_options)
       agent.synchronous = true
-      agent.notice("#{deployer} deployed #{revision}",
+      agent.notice("#{deployer} deployed #{current_revision}",
                    @instrumental_deploy_start,
                    deploy_duration_in_seconds)
     end
