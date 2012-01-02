@@ -40,18 +40,20 @@ module Instrumental
     #  Instrumental::Agent.new(API_KEY, :collector => 'hostname:port')
     def initialize(api_key, options = {})
       default_options = {
-        :collector => 'instrumentalapp.com:8000',
-        :enabled   => true,
-        :test_mode => false,
+        :collector  => 'instrumentalapp.com:8000',
+        :enabled    => true,
+        :test_mode  => false,
+        :synchronous => false
       }
       options   = default_options.merge(options)
       collector = options[:collector].split(':')
 
-      @api_key   = api_key
-      @host      = collector[0]
-      @port      = (collector[1] || 8000).to_i
-      @enabled   = options[:enabled]
-      @test_mode = options[:test_mode]
+      @api_key     = api_key
+      @host        = collector[0]
+      @port        = (collector[1] || 8000).to_i
+      @enabled     = options[:enabled]
+      @test_mode   = options[:test_mode]
+      @synchronous = options[:synchronous]
       @pid = Process.pid
 
 
@@ -228,7 +230,7 @@ module Instrumental
       logger.error err.to_s
       if command_and_args
         logger.debug "requeueing: #{command_and_args}"
-        @queue << command_and_args 
+        @queue << command_and_args
       end
       disconnect
       @failures += 1
