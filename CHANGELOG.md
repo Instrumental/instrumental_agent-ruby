@@ -1,5 +1,6 @@
 ### 0.7 [January 2, 2012]
 * .notice added to API to allow tracking project-wide events on graphs
+* Added Capistrano recipe contributed by [janxious] from (https://github.com/expectedbehavior/)
 * Removed Rack middleware
 * Logs to STDERR instead of /dev/null
 * Synchronous mode can be specified in agent initialization contributed by [janxious] from (https://github.com/expectedbehavior/)
@@ -53,5 +54,5 @@
 * Linux support for watch_server
 * Documentation changes
 
-### 0.1 [OCtober 27, 2011]
+### 0.1 [October 27, 2011]
 * Initial version
