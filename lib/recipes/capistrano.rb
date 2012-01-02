@@ -1,4 +1,4 @@
-Capistrano::Configuration.instance.load do
+defined?(Capistrano) && Capistrano::Configuration.instance.load do
   namespace :instrumental do
     namespace :util do
       desc "marker for beginning of deploy"
