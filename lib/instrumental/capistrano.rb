@@ -1,4 +1,5 @@
 require 'capistrano'
+require 'instrumental_agent'
 
 if Capistrano::Configuration.instance
   Capistrano::Configuration.instance.load do
