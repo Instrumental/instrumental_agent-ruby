@@ -1,3 +1,5 @@
+require 'capistrano'
+
 if Capistrano::Configuration.instance
   Capistrano::Configuration.instance.load do
     namespace :instrumental do
