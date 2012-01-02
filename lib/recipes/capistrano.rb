@@ -13,7 +13,7 @@ defined?(Capistrano) && Capistrano::Configuration.instance.load do
     end
 
     desc "send a notice to instrumental about the deploy"
-    task :notice_deploy do
+    task :record_deploy_notice do
       @instrumental_deploy_start ||= Time.now
       @instrumental_deploy_end   ||= Time.now
       deploy_duration_in_seconds = (@instrumental_deploy_end - @instrumental_deploy_start).to_i
@@ -29,6 +29,6 @@ defined?(Capistrano) && Capistrano::Configuration.instance.load do
   end
 
   before "deploy", "instrumental:util:deploy_start"
-  after "deploy",  "instrumental:util:deploy_end"
-  after "instrumental:util:deploy_end", "instrumental:notice_deploy"
+  after  "deploy", "instrumental:util:deploy_end"
+  after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
 end
