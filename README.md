@@ -90,7 +90,7 @@ initialization and you don't need to change any application code.
 
 ## Capistrano Integration
 
-Add `require "instrumental_agent"` to your capistrano configuration
+Add `require "instrumental/capistrano"` to your capistrano configuration
 and your deploys will be tracked automatically by Instrumental.
 
 The following configuration will be added:
