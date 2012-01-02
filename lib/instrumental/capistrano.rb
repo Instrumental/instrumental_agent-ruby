@@ -29,6 +29,7 @@ if Capistrano::Configuration.instance
         agent.notice("#{deployer} deployed #{current_revision}",
                      @instrumental_deploy_start,
                      deploy_duration_in_seconds)
+        logger.info("Notified Instrumental of deployment")
       end
     end
 
