@@ -22,10 +22,9 @@ if Capistrano::Configuration.instance
         @instrumental_deploy_end   ||= Time.now
         deploy_duration_in_seconds = (@instrumental_deploy_end - @instrumental_deploy_start).to_i
         deployer = Etc.getlogin.chomp
-        agent_options = {}
+        agent_options = { :synchronous => true }
         agent_options[:collector] = instrumental_host if exists?(:instrumental_host)
         agent = Instrumental::Agent.new(instrumental_key, agent_options)
-        agent.synchronous = true
         agent.notice("#{deployer} deployed #{current_revision}",
                      @instrumental_deploy_start,
                      deploy_duration_in_seconds)
