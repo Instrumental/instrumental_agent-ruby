@@ -77,7 +77,7 @@ instrument_server
 
 ## Rack middleware
 
-Running under Rails? You can also give our experimental Rack middleware 
+Running under Rails? You can also give our experimental Rack middleware
 a shot by initializing it with:
 
 ```sh
@@ -86,6 +86,20 @@ Instrumental::Middleware.boot
 
 Need to quickly disable the agent? set :enabled to false on
 initialization and you don't need to change any application code.
+
+
+## Capistrano Integration
+
+Add `require "instrumental_agent"` to your capistrano configuration
+and your deploys will be tracked automatically by Instrumental.
+
+The following configuration will be added:
+
+```ruby
+before "deploy", "instrumental:util:deploy_start"
+after  "deploy", "instrumental:util:deploy_end"
+after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
+```
 
 ## Troubleshooting & Help
 
