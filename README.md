@@ -91,6 +91,8 @@ The following configuration will be added:
 ```ruby
 before "deploy", "instrumental:util:deploy_start"
 after  "deploy", "instrumental:util:deploy_end"
+before "deploy:migrations", "instrumental:util:deploy_start"
+after  "deploy:migrations", "instrumental:util:deploy_end"
 after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
 ```
 
