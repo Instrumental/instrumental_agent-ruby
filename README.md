@@ -84,7 +84,12 @@ initialization and you don't need to change any application code.
 ## Capistrano Integration
 
 Add `require "instrumental/capistrano"` to your capistrano configuration
-and your deploys will be tracked automatically by Instrumental.
+and your deploys will be tracked by Instrumental.  Add the API token for
+the project you want to track to by setting the following Capistrano var:
+
+```ruby
+set :instrumental_key, "MY_API_KEY"
+```
 
 The following configuration will be added:
 
