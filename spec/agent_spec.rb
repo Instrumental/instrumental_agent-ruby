@@ -249,6 +249,7 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment('a',  1)
     @agent.increment('a',  2.2)
     @agent.increment('a',  333.333)
+    @agent.increment('a',  Float::EPSILON)
     wait
     @server.commands.join("\n").should_not include("increment agent.invalid_value")
   end

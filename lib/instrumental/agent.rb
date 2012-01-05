@@ -138,7 +138,7 @@ module Instrumental
 
     def valid?(metric, value, time)
       valid_metric = metric =~ /^([\d\w\-_]+\.)*[\d\w\-_]+$/i
-      valid_value  = value.to_s =~ /^-?\d+(\.\d+)?$/
+      valid_value  = value.to_s =~ /^-?\d+(\.\d+)?(e-\d+)?$/
 
       return true if valid_metric && valid_value
 
