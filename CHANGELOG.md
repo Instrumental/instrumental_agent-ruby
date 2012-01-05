@@ -1,3 +1,6 @@
+### 0.7.1 [January 5, 2012]
+* Support for exponentially encoded float values
+
 ### 0.7 [January 2, 2012]
 * .notice added to API to allow tracking project-wide events on graphs
 * Added Capistrano recipe contributed by [janxious] from (https://github.com/expectedbehavior/)
