@@ -1,3 +1,6 @@
+### 0.7.2 [January 5, 2012]
+* Deploy durations tracking fixed.
+
 ### 0.7.1 [January 5, 2012]
 * Support for exponentially encoded float values
 
