@@ -20,8 +20,6 @@ if Capistrano::Configuration.instance
       task :record_deploy_notice do
         start_at = exists?(:instrumental_deploy_start) ? instrumental_deploy_start : Time.now
         end_at = exists?(:instrumental_deploy_end) ? instrumental_deploy_end : start_at
-        puts "@instrumental_deploy_start = #{start_at.inspect}"
-        puts "@instrumental_deploy_end = #{end_at.inspect}"
         deploy_duration_in_seconds = end_at - start_at
         deployer = Etc.getlogin.chomp
         agent_options = { :synchronous => true }
