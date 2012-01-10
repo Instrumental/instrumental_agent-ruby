@@ -84,6 +84,20 @@ module Instrumental
       nil
     end
 
+    # Store the duration of a block in a metric.
+    #
+    #  agent.time('load') do
+    #    # potentially slow stuff
+    #  end
+    def time(metric)
+      start = Time.now
+      result = yield
+      finish = Time.now
+      duration = finish - start
+      gauge(metric, duration, start)
+      result
+    end
+
     # Increment a metric, optionally more than one or at a specific time.
     #
     #  agent.increment('users')
