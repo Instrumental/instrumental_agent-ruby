@@ -64,10 +64,25 @@ describe Instrumental::Agent, "enabled in test_mode" do
   it "should report a time as gauge and return the block result" do
     now = Time.now
     @agent.time("time_value_test") do
+      sleep 0.1
       1 + 1
     end.should == 2
     wait
     @server.commands.last.should =~ /gauge time_value_test .* #{now.to_i}/
+    time = @server.commands.last.scan(/gauge time_value_test (.*) #{now.to_i}/)[0][0].to_f
+    time.should > 0.1
+  end
+
+  it "should report a time as a millisecond gauge and return the block result" do
+    now = Time.now
+    @agent.time_ms("time_ms_test") do
+      sleep 0.1
+      1 + 1
+    end.should == 2
+    wait
+    @server.commands.last.should =~ /gauge time_ms_test .* #{now.to_i}/
+    time = @server.commands.last.scan(/gauge time_ms_test (.*) #{now.to_i}/)[0][0].to_f
+    time.should > 100
   end
 
   it "should report an increment" do
