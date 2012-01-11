@@ -1,3 +1,6 @@
+### 0.8.0 [January 10, 2012]
+* Initial support for timing events.
+
 ### 0.7.2 [January 5, 2012]
 * Deploy durations tracking fixed.
 
