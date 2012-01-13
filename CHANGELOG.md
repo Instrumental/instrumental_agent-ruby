@@ -1,3 +1,6 @@
+### 0.8.1 [January 13, 2012]
+* Event timing works when timed events throw exceptions
+
 ### 0.8.0 [January 10, 2012]
 * Initial support for timing events.
 
