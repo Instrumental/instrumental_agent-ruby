@@ -102,10 +102,13 @@ module Instrumental
     #  end
     def time(metric, multiplier = 1)
       start = Time.now
-      result = yield
-      finish = Time.now
-      duration = finish - start
-      gauge(metric, duration * multiplier, start)
+      begin
+        result = yield
+      ensure
+        finish = Time.now
+        duration = finish - start
+        gauge(metric, duration * multiplier, start)
+      end
       result
     end
 

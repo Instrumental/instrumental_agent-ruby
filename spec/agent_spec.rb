@@ -73,6 +73,21 @@ describe Instrumental::Agent, "enabled in test_mode" do
     time.should > 0.1
   end
 
+  it "should allow a block used in .time to throw an exception and still be timed" do
+    now = Time.now
+    lambda {
+      @agent.time("time_value_test") do
+        sleep 0.1
+        throw :an_exception
+        sleep 1
+      end
+      }.should raise_error
+    wait
+    @server.commands.last.should =~ /gauge time_value_test .* #{now.to_i}/
+    time = @server.commands.last.scan(/gauge time_value_test (.*) #{now.to_i}/)[0][0].to_f
+    time.should > 0.1
+  end
+
   it "should report a time as a millisecond gauge and return the block result" do
     now = Time.now
     @agent.time_ms("time_ms_test") do
