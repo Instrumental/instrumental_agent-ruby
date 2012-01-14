@@ -253,7 +253,7 @@ module Instrumental
       Timeout.timeout(TIMEOUT_ON_AUTHENTICATE) do
         # let method rescue catch timeout exception
         @socket.gets # throw away hello response
-        if @socket.gets != 'Authenticated'
+        if @socket.gets.chomp != 'authenticated'
           raise # retry
         end
       end
