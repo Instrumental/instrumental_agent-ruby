@@ -250,7 +250,7 @@ module Instrumental
       logger.info "connected to collector at #{host}:#{port}"
       @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       @socket.puts "authenticate #{@api_key}"
-      Timeout.timeout.new(TIMEOUT_ON_AUTHENTICATE) do
+      Timeout.timeout(TIMEOUT_ON_AUTHENTICATE) do
         # let method rescue catch timeout exception
         @socket.gets # throw away hello response
         if @socket.gets != 'Authenticated'
