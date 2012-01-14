@@ -3,6 +3,7 @@ require 'instrumental/version'
 require 'logger'
 require 'thread'
 require 'socket'
+require 'timeout'
 
 # Sets up a connection to the collector.
 #
@@ -12,6 +13,7 @@ module Instrumental
     BACKOFF = 2.0
     MAX_RECONNECT_DELAY = 15
     MAX_BUFFER = 5000
+    TIMEOUT_ON_AUTHENTICATE = 5
 
     attr_accessor :host, :port, :synchronous
     attr_reader :connection, :enabled
@@ -248,6 +250,13 @@ module Instrumental
       logger.info "connected to collector at #{host}:#{port}"
       @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       @socket.puts "authenticate #{@api_key}"
+      Timeout.timeout.new(TIMEOUT_ON_AUTHENTICATE) do
+        # let method rescue catch timeout exception
+        @socket.gets # throw away hello response
+        if @socket.gets != 'Authenticated'
+          raise # retry
+        end
+      end
       loop do
         command_and_args = @queue.pop
         test_connection
