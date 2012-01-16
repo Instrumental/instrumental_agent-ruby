@@ -13,7 +13,7 @@ module Instrumental
     BACKOFF = 2.0
     MAX_RECONNECT_DELAY = 15
     MAX_BUFFER = 5000
-    TIMEOUT_ON_AUTHENTICATE = 5
+    REPLY_TIMEOUT = 5 # seconds
 
     attr_accessor :host, :port, :synchronous
     attr_reader :connection, :enabled
@@ -242,21 +242,21 @@ module Instrumental
       end
     end
 
+    def send_with_reply_timeout(message)
+      @socket.puts message
+      Timeout.timeout(REPLY_TIMEOUT) do
+        raise unless @socket.gets.chomp == 'ok'
+      end
+    end
+
     def connection_worker
       command_and_args = nil
       logger.info "connecting to collector"
       @socket = TCPSocket.new(host, port)
       @failures = 0
       logger.info "connected to collector at #{host}:#{port}"
-      @socket.puts "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
-      @socket.puts "authenticate #{@api_key}"
-      Timeout.timeout(TIMEOUT_ON_AUTHENTICATE) do
-        # let method rescue catch timeout exception
-        @socket.gets # throw away hello response
-        if @socket.gets.chomp != 'authenticated'
-          raise # retry
-        end
-      end
+      send_with_reply_timeout "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
+      send_with_reply_timeout "authenticate #{@api_key}"
       loop do
         command_and_args = @queue.pop
         test_connection
