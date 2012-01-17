@@ -25,6 +25,9 @@ class TestServer
               command = socket.gets.strip
               # puts "got: #{command}"
               commands << command
+              if %w(hello authenticate).include?(command.split(' ')[0])
+                socket.puts "ok"
+              end
             end
           end
         end
