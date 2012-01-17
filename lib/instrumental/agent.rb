@@ -13,7 +13,7 @@ module Instrumental
     BACKOFF = 2.0
     MAX_RECONNECT_DELAY = 15
     MAX_BUFFER = 5000
-    REPLY_TIMEOUT = 5 # seconds
+    REPLY_TIMEOUT = 10
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
