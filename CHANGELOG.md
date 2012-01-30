@@ -1,3 +1,6 @@
+### 0.8.2 [January 17, 2012]
+* Fixing data loss issue when collector was not responding appropriately
+
 ### 0.8.1 [January 13, 2012]
 * Event timing works when timed events throw exceptions
 
