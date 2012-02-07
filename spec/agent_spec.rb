@@ -88,7 +88,7 @@ describe Instrumental::Agent, "enabled in test_mode" do
         throw :an_exception
         sleep 1
       end
-      }.should raise_error
+    }.should raise_error
     wait
     @server.commands.last.should =~ /gauge time_value_test .* #{now.to_i}/
     time = @server.commands.last.scan(/gauge time_value_test (.*) #{now.to_i}/)[0][0].to_f
