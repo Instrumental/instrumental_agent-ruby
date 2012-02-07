@@ -368,7 +368,22 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should == "increment reconnect_test 1 1234\n"
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
+  end
+
+  it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
+    @server = TestServer.new
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    TCPSocket.stub!(:new) { |*args| sleep(5) && StringIO.new }
+    with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do 
+      if (pid = fork { @agent.increment('foo', 1) })
+        tm = Time.now.to_f
+        Process.wait(pid)
+        diff = Time.now.to_f - tm
+        diff.should >= 3
+        diff.should < 5
+      end
+    end
   end
 end
 
