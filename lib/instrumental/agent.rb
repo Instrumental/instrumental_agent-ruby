@@ -235,7 +235,7 @@ module Instrumental
           start_connection_worker
         end
 
-        cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
+        cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
         if @queue.size < MAX_BUFFER
           logger.debug "Queueing: #{cmd.chomp}"
           queue_message(cmd, { :synchronous => @synchronous })
