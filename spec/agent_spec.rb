@@ -349,7 +349,7 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should == "increment reconnect_test 1 1234\n"
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
   end
 
   it "should buffer commands when server is not responsive" do
@@ -358,7 +358,7 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should == "increment reconnect_test 1 1234\n"
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
   end
 
   it "should buffer commands when authentication fails" do
