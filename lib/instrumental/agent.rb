@@ -3,7 +3,12 @@ require 'instrumental/version'
 require 'logger'
 require 'thread'
 require 'socket'
-require 'timeout'
+if RUBY_VERSION < "1.9"
+  require 'system_timer'
+else
+  require 'timeout'
+end
+
 
 # Sets up a connection to the collector.
 #
@@ -167,6 +172,11 @@ module Instrumental
 
     private
 
+    def with_timeout(time, &block)
+      tmr_klass = RUBY_VERSION < "1.9" ? SystemTimer : Timeout
+      tmr_klass.timeout(time) { yield }
+    end
+
     def valid_note?(note)
       note !~ /[\n\r]/
     end
@@ -244,7 +254,7 @@ module Instrumental
 
     def send_with_reply_timeout(message)
       @socket.puts message
-      Timeout.timeout(REPLY_TIMEOUT) do
+      with_timeout(REPLY_TIMEOUT) do
         response = @socket.gets
         if response.to_s.chomp != "ok"
           raise "Bad Response #{response.inspect} to #{message.inspect}"
