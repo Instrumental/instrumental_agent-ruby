@@ -67,6 +67,7 @@ module Instrumental
       @enabled     = options[:enabled]
       @test_mode   = options[:test_mode]
       @synchronous = options[:synchronous]
+      @allow_reconnect = true
       @pid = Process.pid
 
 
@@ -222,10 +223,7 @@ module Instrumental
         cmd = "%s %s\n" % [cmd, args.collect(&:to_s).join(" ")]
         if @queue.size < MAX_BUFFER
           logger.debug "Queueing: #{cmd.chomp}"
-          @main_thread = Thread.current if @synchronous
-          @queue << cmd
-          Thread.stop if @synchronous
-          cmd
+          queue_message(cmd, { :synchronous => @synchronous })
         else
           logger.warn "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
           nil
@@ -233,12 +231,32 @@ module Instrumental
       end
     end
 
+    def queue_message(message, options = {})
+      if @enabled
+        options ||= {}
+        if options[:allow_reconnect].nil?
+          options[:allow_reconnect] = @allow_reconnect
+        end
+        synchronous = options.delete(:synchronous)
+        if synchronous
+          options[:sync_resource] ||= ConditionVariable.new
+          @queue << [message, options]
+          @sync_mutex.synchronize {
+            options[:sync_resource].wait(@sync_mutex)
+          }
+        else
+          @queue << [message, options]
+        end
+      end
+      message
+    end
+
     def test_connection
       # FIXME: Test connection state hack
       begin
         @socket.read_nonblock(1) # TODO: put data back?
       rescue Errno::EAGAIN
-        # nop
+        # noop
       end
     end
 
@@ -247,9 +265,7 @@ module Instrumental
         disconnect
         logger.info "Starting thread"
         @thread = Thread.new do
-          loop do
-            break if connection_worker
-          end
+          run_worker_loop
         end
       end
     end
@@ -264,31 +280,44 @@ module Instrumental
       end
     end
 
-    def connection_worker
+    def run_worker_loop
       command_and_args = nil
+      command_options = nil
       logger.info "connecting to collector"
-      @socket = TCPSocket.new(host, port)
+      @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
+      @failures = 0
       logger.info "connected to collector at #{host}:#{port}"
       send_with_reply_timeout "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       send_with_reply_timeout "authenticate #{@api_key}"
-      @failures = 0
       loop do
-        command_and_args = @queue.pop
+        command_and_args, command_options = @queue.pop
+        sync_resource = command_options && command_options[:sync_resource]
         test_connection
-
         case command_and_args
         when 'exit'
           logger.info "exiting, #{@queue.size} commands remain"
           return true
+        when 'flush'
+          release_resource = true
         else
           logger.debug "Sending: #{command_and_args.chomp}"
           @socket.puts command_and_args
-          command_and_args = nil
         end
-        @main_thread.run if @synchronous
+        command_and_args = nil
+        command_options = nil
+        if sync_resource
+          @sync_mutex.synchronize do
+            sync_resource.signal
+          end
+        end
       end
     rescue Exception => err
-      logger.error err.to_s
+      logger.error err.backtrace.join("\n")
+      if @allow_reconnect == false || 
+        (command_options && command_options[:allow_reconnect] == false)
+        logger.error "Not trying to reconnect"
+        return
+      end
       if command_and_args
         logger.debug "requeueing: #{command_and_args}"
         @queue << command_and_args
@@ -305,16 +334,20 @@ module Instrumental
 
     def setup_cleanup_at_exit
       at_exit do
-        if !@queue.empty? && @thread.alive?
-          if @failures > 0
-            logger.info "exit received but disconnected, dropping #{@queue.size} commands"
-            @thread.kill
+        logger.info "Cleaning up agent, queue empty: #{@queue.empty?}, thread running: #{@thread.alive?}"
+        @allow_reconnect = false
+        logger.info "exit received, currently #{@queue.size} commands to be sent"
+        queue_message('exit')
+        begin
+          with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
+        rescue Timeout::Error
+          if @queue.size > 0
+            logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
           else
-            logger.info "exit received, #{@queue.size} commands to be sent"
-            @queue << 'exit'
-            @thread.join
+            logger.error "Timed out Instrumental Agent, exiting"
           end
         end
+        
       end
     end
 
