@@ -223,6 +223,7 @@ describe Instrumental::Agent, "enabled" do
       5.times do |i|
         @agent.increment('overflow_test', i + 1, 300)
       end
+      @agent.instance_variable_get(:@queue).size.should == 0
       wait # let the server receive the commands
       @server.commands.should include("increment overflow_test 1 300")
       @server.commands.should include("increment overflow_test 2 300")
