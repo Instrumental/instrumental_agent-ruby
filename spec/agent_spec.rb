@@ -27,6 +27,13 @@ describe Instrumental::Agent, "disabled" do
     @server.connect_count.should == 0
   end
 
+  it "should no op on flush" do
+    1.upto(100) { @agent.gauge('disabled_test', 1) }
+    @agent.flush
+    wait
+    @server.commands.should be_empty
+  end
+
 end
 
 describe Instrumental::Agent, "enabled in test_mode" do
@@ -308,6 +315,15 @@ describe Instrumental::Agent, "enabled" do
     @agent.notice("Test note\n").should be_nil
     wait
     @server.commands.join("\n").should_not include("notice Test note")
+  end
+
+  it "should allow flushing pending values to the server" do
+    1.upto(100) { @agent.gauge('a', rand(50)) }
+    @agent.instance_variable_get(:@queue).size.should >= 100
+    @agent.flush
+    @agent.instance_variable_get(:@queue).size.should ==  0
+    wait
+    @server.commands.grep(/^gauge a /).size.should == 100
   end
 end
 
