@@ -74,6 +74,7 @@ module Instrumental
       if @enabled
         @failures = 0
         @queue = Queue.new
+        @sync_mutex = Mutex.new
         start_connection_worker
         setup_cleanup_at_exit
       end
