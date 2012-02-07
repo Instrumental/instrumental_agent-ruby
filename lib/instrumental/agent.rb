@@ -158,6 +158,20 @@ module Instrumental
       nil
     end
 
+    # Synchronously flush all pending metrics out to the server
+    # By default will not try to reconnect to the server if a 
+    # connection failure happens during the flush, though you
+    # may optionally override this behavior by passing false
+    # as an argument.
+    #
+    # agent.flush
+    def flush(allow_reconnect = false)
+      queue_message('flush', {
+        :synchronous => true,
+        :allow_reconnect => allow_reconnect
+      })
+    end
+
     def enabled?
       @enabled
     end
