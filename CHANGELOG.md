@@ -1,3 +1,6 @@
+### 0.8.3 [February 9th, 2012]
+* Removing symbol to proc use for compatibility with older version of Ruby
+
 ### 0.8.2 [January 17, 2012]
 * Fixing data loss issue when collector was not responding appropriately
 
