@@ -161,8 +161,7 @@ module Instrumental
     # Synchronously flush all pending metrics out to the server
     # By default will not try to reconnect to the server if a
     # connection failure happens during the flush, though you
-    # may optionally override this behavior by passing false
-    # as an argument.
+    # may optionally override this behavior by passing true.
     #
     # agent.flush
     def flush(allow_reconnect = false)
