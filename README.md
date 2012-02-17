@@ -111,5 +111,4 @@ after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
 
 ## Troubleshooting & Help
 
-We are here to help, please email us at
-[support@instrumentalapp.com](mailto:support@instrumentalapp.com).
+We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com), or visit the [Instrumental Support](https://fastestforward.campfirenow.com/6b934) Campfire room.

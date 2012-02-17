@@ -159,7 +159,7 @@ module Instrumental
     end
 
     # Synchronously flush all pending metrics out to the server
-    # By default will not try to reconnect to the server if a 
+    # By default will not try to reconnect to the server if a
     # connection failure happens during the flush, though you
     # may optionally override this behavior by passing false
     # as an argument.
@@ -328,7 +328,7 @@ module Instrumental
       end
     rescue Exception => err
       logger.error err.backtrace.join("\n")
-      if @allow_reconnect == false || 
+      if @allow_reconnect == false ||
         (command_options && command_options[:allow_reconnect] == false)
         logger.error "Not trying to reconnect"
         return
@@ -362,7 +362,7 @@ module Instrumental
             logger.error "Timed out Instrumental Agent, exiting"
           end
         end
-        
+
       end
     end
 
