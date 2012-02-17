@@ -20,7 +20,7 @@ module Instrumental
     MAX_BUFFER = 5000
     REPLY_TIMEOUT = 10
     CONNECT_TIMEOUT = 20
-    EXIT_FLUSH_TIMEOUT = 10
+    EXIT_FLUSH_TIMEOUT = 5
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
