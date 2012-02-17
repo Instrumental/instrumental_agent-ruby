@@ -299,10 +299,10 @@ module Instrumental
       command_options = nil
       logger.info "connecting to collector"
       @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
-      @failures = 0
       logger.info "connected to collector at #{host}:#{port}"
       send_with_reply_timeout "hello version #{Instrumental::VERSION} test_mode #{@test_mode}"
       send_with_reply_timeout "authenticate #{@api_key}"
+      @failures = 0
       loop do
         command_and_args, command_options = @queue.pop
         sync_resource = command_options && command_options[:sync_resource]
