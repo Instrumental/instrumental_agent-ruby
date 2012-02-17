@@ -27,13 +27,19 @@ describe Instrumental::Agent, "disabled" do
     @server.connect_count.should == 0
   end
 
-  it "should no op on flush" do
+  it "should no op on flush without reconnect" do
     1.upto(100) { @agent.gauge('disabled_test', 1) }
-    @agent.flush
+    @agent.flush(false)
     wait
     @server.commands.should be_empty
   end
 
+  it "should no op on flush with reconnect" do
+    1.upto(100) { @agent.gauge('disabled_test', 1) }
+    @agent.flush(true)
+    wait
+    @server.commands.should be_empty
+  end
 end
 
 describe Instrumental::Agent, "enabled in test_mode" do
@@ -369,6 +375,15 @@ describe Instrumental::Agent, "connection problems" do
     @agent.increment('reconnect_test', 1, 1234)
     wait
     @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
+  end
+
+  it "should send commands in a short-lived process" do
+    @server = TestServer.new
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    if pid = fork { @agent.increment('foo', 1, 1234) }
+      Process.wait(pid)
+      @server.commands.last.should == "increment foo 1 1234"
+    end
   end
 
   it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
