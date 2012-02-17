@@ -145,7 +145,7 @@ module Instrumental
 
     # Send a notice to the server (deploys, downtime, etc.)
     #
-    # agent.notice('A notice')
+    #  agent.notice('A notice')
     def notice(note, time = Time.now, duration = 0)
       if valid_note?(note)
         send_command("notice", time.to_i, duration.to_i, note)
@@ -163,7 +163,7 @@ module Instrumental
     # connection failure happens during the flush, though you
     # may optionally override this behavior by passing true.
     #
-    # agent.flush
+    #  agent.flush
     def flush(allow_reconnect = false)
       queue_message('flush', {
         :synchronous => true,
