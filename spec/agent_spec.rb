@@ -390,7 +390,7 @@ describe Instrumental::Agent, "connection problems" do
     @server = TestServer.new
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
     TCPSocket.stub!(:new) { |*args| sleep(5) && StringIO.new }
-    with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do 
+    with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
       if (pid = fork { @agent.increment('foo', 1) })
         tm = Time.now.to_f
         Process.wait(pid)
