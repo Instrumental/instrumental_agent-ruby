@@ -1,3 +1,7 @@
+### 0.9.0 [February 20th, 2012]
+* Added manual synchronous flushing command
+* Fixed bug with data dropping on short-lived forks
+
 ### 0.8.3 [February 9th, 2012]
 * Removing symbol to proc use for compatibility with older version of Ruby
 
