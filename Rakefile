@@ -1,6 +1,6 @@
 require 'bundler/gem_helper'
 require 'rspec/core/rake_task'
-puts Dir["*-#{RUBY_PLATFORM}.gemspec"]
+
 if !(gemspecs = Dir["*-#{RUBY_PLATFORM}.gemspec"]).empty?
   spec = File.basename(gemspecs.first, ".gemspec")
   Bundler::GemHelper.install_tasks(:name => spec)
