@@ -29,6 +29,8 @@ I.gauge('load', 1.23)                # value at a point in time
 
 I.increment('signups')               # increasing value, think "events"
 
+I.counter(user.id)                   # ever increasing value
+
 I.time('query_time') do              # time a block of code
   post = Post.find(1)
 end

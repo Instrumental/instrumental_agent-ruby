@@ -143,6 +143,21 @@ module Instrumental
       nil
     end
 
+    # Store a counter, optionally at a specific time.
+    #
+    #  agent.counter(user.id)
+    def counter(metric, value, time = Time.now)
+      if valid?(metric, value, time) &&
+          send_command("counter", metric, value, time.to_i)
+        value
+      else
+        nil
+      end
+    rescue Exception => e
+      report_exception(e)
+      nil
+    end
+
     # Send a notice to the server (deploys, downtime, etc.)
     #
     #  agent.notice('A notice')

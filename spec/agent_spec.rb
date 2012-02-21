@@ -120,6 +120,13 @@ describe Instrumental::Agent, "enabled in test_mode" do
     @server.commands.last.should == "increment increment_test 1 #{now.to_i}"
   end
 
+  it "should report a counter" do
+    now = Time.now
+    @agent.counter("counter_test", 22)
+    wait
+    @server.commands.last.should == "counter counter_test 22 #{now.to_i}"
+  end
+
   it "should send notices to the server" do
     tm = Time.now
     @agent.notice("Test note", tm)
@@ -207,6 +214,26 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment('increment_test', 1, 555)
     wait
     @server.commands.last.should == "increment increment_test 1 555"
+  end
+
+  it "should report a counter" do
+    now = Time.now
+    @agent.counter("counter_test", 22)
+    wait
+    @server.commands.last.should == "counter counter_test 22 #{now.to_i}"
+  end
+
+  it "should return the value counted" do
+    now = Time.now
+    @agent.counter("counter_test", 1).should == 1
+    @agent.counter("counter_test", 5).should == 5
+    wait
+  end
+
+  it "should report a counter with a set time" do
+    @agent.counter('counter_test', 3, 555)
+    wait
+    @server.commands.last.should == "counter counter_test 3 555"
   end
 
   it "should discard data that overflows the buffer" do
