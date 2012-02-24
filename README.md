@@ -74,9 +74,7 @@ end
 
 ## Server Stats
 
-Want some general server stats (load, memory, etc.)? Check out the
-[instrumental_tools](https://github.com/fastestforward/instrumental_tools)
-gem.
+Want some general server stats (load, memory, etc.)? Check out the [instrumental_tools](https://github.com/fastestforward/instrumental_tools) gem.
 
 ```sh
 gem install instrumental_tools
