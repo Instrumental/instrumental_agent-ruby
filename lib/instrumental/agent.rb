@@ -4,9 +4,25 @@ require 'logger'
 require 'thread'
 require 'socket'
 if RUBY_VERSION < "1.9"
-  require 'system_timer'
+  begin
+    gem 'system_timer'
+    require 'system_timer'
+    InstrumentalTimeout = SystemTimer
+  rescue Exception => e
+    puts <<-EOMSG
+WARNING:: You do not currently have system_timer installed.
+It is strongly advised that you install this gem when using
+instrumental_agent.  You can install it in your Gemfile via:
+gem 'system_timer'
+or manually via:
+gem install system_timer
+    EOMSG
+    require 'timeout'
+    InstrumentalTimeout = Timeout
+  end
 else
   require 'timeout'
+  InstrumentalTimeout = Timeout
 end
 
 
@@ -190,8 +206,7 @@ module Instrumental
     private
 
     def with_timeout(time, &block)
-      tmr_klass = RUBY_VERSION < "1.9" ? SystemTimer : Timeout
-      tmr_klass.timeout(time) { yield }
+      InstrumentalTimeout.timeout(time) { yield }
     end
 
     def valid_note?(note)
