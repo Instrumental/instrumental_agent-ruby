@@ -12,7 +12,8 @@ if RUBY_VERSION < "1.9"
     puts <<-EOMSG
 WARNING:: You do not currently have system_timer installed.
 It is strongly advised that you install this gem when using
-instrumental_agent.  You can install it in your Gemfile via:
+instrumental_agent with Ruby 1.8.x.  You can install it in 
+your Gemfile via:
 gem 'system_timer'
 or manually via:
 gem install system_timer
