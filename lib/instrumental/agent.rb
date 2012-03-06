@@ -3,7 +3,7 @@ require 'instrumental/version'
 require 'logger'
 require 'thread'
 require 'socket'
-if RUBY_VERSION < "1.9"
+if RUBY_VERSION < "1.9" && RUBY_PLATFORM != "java"
   begin
     gem 'system_timer'
     require 'system_timer'
