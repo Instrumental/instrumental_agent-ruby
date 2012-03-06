@@ -1,3 +1,6 @@
+### 0.9.1 [March 6th, 2012]
+* No longer install system_timer on Ruby 1.8.x, but warn if it's not installed
+
 ### 0.9.0 [February 20th, 2012]
 * Added manual synchronous flushing command
 * Fixed bug with data dropping on short-lived forks
