@@ -26,6 +26,13 @@ else
   InstrumentalTimeout = Timeout
 end
 
+if RUBY_DESCRIPTION =~ /Ruby Enterprise Edition/
+  require 'instrumental/backport/queue_1_8_7'
+  InstrumentalQueue = Instrumental::Queue
+else
+  InstrumentalQueue = Queue
+end
+
 
 # Sets up a connection to the collector.
 #
@@ -87,10 +94,9 @@ module Instrumental
       @allow_reconnect = true
       @pid = Process.pid
 
-
       if @enabled
         @failures = 0
-        @queue = Queue.new
+        @queue = InstrumentalQueue.new
         @sync_mutex = Mutex.new
         start_connection_worker
         setup_cleanup_at_exit
@@ -246,7 +252,7 @@ module Instrumental
           logger.info "Detected fork"
           @pid = Process.pid
           @socket = nil
-          @queue = Queue.new
+          @queue = InstrumentalQueue.new
           start_connection_worker
         end
 
