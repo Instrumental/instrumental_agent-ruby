@@ -12,6 +12,8 @@ describe Instrumental::Agent, "disabled" do
   end
 
   after do
+    @agent.stop
+    @agent = nil
     @server.stop
   end
 
@@ -43,12 +45,14 @@ describe Instrumental::Agent, "disabled" do
 end
 
 describe Instrumental::Agent, "enabled in test_mode" do
-  before do
+  before(:each) do
     @server = TestServer.new
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :test_mode => true)
   end
 
-  after do
+  after(:each) do
+    @agent.stop
+    @agent = nil
     @server.stop
   end
 
@@ -110,7 +114,7 @@ describe Instrumental::Agent, "enabled in test_mode" do
     wait
     @server.commands.last.should =~ /gauge time_ms_test .* #{now.to_i}/
     time = @server.commands.last.scan(/gauge time_ms_test (.*) #{now.to_i}/)[0][0].to_f
-    time.should > 100
+    time.should > 100.0
   end
 
   it "should report an increment" do
@@ -135,6 +139,8 @@ describe Instrumental::Agent, "enabled" do
   end
 
   after do
+    @agent.stop
+    @agent = nil
     @server.stop
   end
 
@@ -336,6 +342,7 @@ end
 
 describe Instrumental::Agent, "connection problems" do
   after do
+    @agent.stop
     @server.stop
   end
 
@@ -344,7 +351,7 @@ describe Instrumental::Agent, "connection problems" do
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
     wait
     @server.disconnect_all
-    @agent.increment('reconnect_test', 1, 1234) # triggers reconnect
+    @agent.increment('reconnect_test', 1, 1234) # triggers reconnect)
     wait
     @server.connect_count.should == 2
     @server.commands.last.should == "increment reconnect_test 1 1234"
@@ -408,6 +415,11 @@ describe Instrumental::Agent, "enabled with sync option" do
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => true)
   end
 
+  after do
+    @agent.stop
+    @server.stop
+  end
+
   it "should send all data in synchronous mode" do
     with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
       5.times do |i|
@@ -421,4 +433,5 @@ describe Instrumental::Agent, "enabled with sync option" do
       @server.commands.should include("increment overflow_test 5 300")
     end
   end
+
 end
