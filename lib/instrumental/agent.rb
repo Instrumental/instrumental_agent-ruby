@@ -3,6 +3,7 @@ require 'instrumental/version'
 require 'logger'
 require 'thread'
 require 'socket'
+
 if RUBY_VERSION < "1.9" && RUBY_PLATFORM != "java"
   begin
     gem 'system_timer'
@@ -194,6 +195,14 @@ module Instrumental
       @logger ||= self.class.logger
     end
 
+    def stop
+      disconnect
+      if @thread
+        @thread.kill
+        @thread = nil
+      end
+    end
+
     private
 
     def with_timeout(time, &block)
@@ -357,12 +366,13 @@ module Instrumental
 
     def setup_cleanup_at_exit
       at_exit do
-        logger.info "Cleaning up agent, queue empty: #{@queue.empty?}, thread running: #{@thread.alive?}"
+        thread_alive = @thread && @thread.alive?
+        logger.info "Cleaning up agent, queue empty: #{@queue.empty?}, thread running: #{thread_alive}"
         @allow_reconnect = false
         logger.info "exit received, currently #{@queue.size} commands to be sent"
         queue_message('exit')
         begin
-          with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
+          with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join } if @thread
         rescue Timeout::Error
           if @queue.size > 0
             logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
