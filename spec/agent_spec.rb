@@ -368,11 +368,7 @@ describe Instrumental::Agent, "connection problems" do
     @agent.increment("reconnect_test", 1, 1234)
     wait
     @server.disconnect_all
-<<<<<<< HEAD
     @agent.increment('reconnect_test', 1, 5678) # triggers reconnect
-=======
-    @agent.increment('reconnect_test', 1, 1234) # triggers reconnect)
->>>>>>> 88f8517... stop agent after tests
     wait
     @server.connect_count.should == 2
     @server.commands.last.should == "increment reconnect_test 1 5678"
