@@ -85,16 +85,6 @@ module Instrumental
       @test_mode   = options[:test_mode]
       @synchronous = options[:synchronous]
       @allow_reconnect = true
-      @pid = Process.pid
-
-
-      if @enabled
-        @failures = 0
-        @queue = Queue.new
-        @sync_mutex = Mutex.new
-        start_connection_worker
-        setup_cleanup_at_exit
-      end
     end
 
     # Store a gauge for a metric, optionally at a specific time.
@@ -242,13 +232,7 @@ module Instrumental
 
     def send_command(cmd, *args)
       if enabled?
-        if @pid != Process.pid
-          logger.info "Detected fork"
-          @pid = Process.pid
-          @socket = nil
-          @queue = Queue.new
-          start_connection_worker
-        end
+        start_connection_worker if !running?
 
         cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
         if @queue.size < MAX_BUFFER
@@ -290,9 +274,18 @@ module Instrumental
       end
     end
 
+    def setup_current_process
+      @pid = Process.pid
+      setup_cleanup_at_exit
+    end
+
     def start_connection_worker
       if enabled?
         disconnect
+        setup_current_process
+        @queue = Queue.new
+        @sync_mutex = Mutex.new
+        @failures = 0
         logger.info "Starting thread"
         @thread = Thread.new do
           run_worker_loop
@@ -379,6 +372,10 @@ module Instrumental
         end
 
       end
+    end
+
+    def running?
+      !@thread.nil? && @pid == Process.pid
     end
 
     def disconnect
