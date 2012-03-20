@@ -86,6 +86,7 @@ module Instrumental
       @test_mode   = options[:test_mode]
       @synchronous = options[:synchronous]
       @allow_reconnect = true
+      setup_cleanup_at_exit
     end
 
     # Store a gauge for a metric, optionally at a specific time.
@@ -283,15 +284,10 @@ module Instrumental
       end
     end
 
-    def setup_current_process
-      @pid = Process.pid
-      setup_cleanup_at_exit
-    end
-
     def start_connection_worker
       if enabled?
         disconnect
-        setup_current_process
+        @pid = Process.pid
         @queue = Queue.new
         @sync_mutex = Mutex.new
         @failures = 0
@@ -366,21 +362,21 @@ module Instrumental
 
     def setup_cleanup_at_exit
       at_exit do
-        thread_alive = @thread && @thread.alive?
-        logger.info "Cleaning up agent, queue empty: #{@queue.empty?}, thread running: #{thread_alive}"
-        @allow_reconnect = false
-        logger.info "exit received, currently #{@queue.size} commands to be sent"
-        queue_message('exit')
-        begin
-          with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join } if @thread
-        rescue Timeout::Error
-          if @queue.size > 0
-            logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
-          else
-            logger.error "Timed out Instrumental Agent, exiting"
+        if running?
+          logger.info "Cleaning up agent, queue empty: #{@queue.empty?}, thread running: #{@thread.alive?}"
+          @allow_reconnect = false
+          logger.info "exit received, currently #{@queue.size} commands to be sent"
+          queue_message('exit')
+          begin
+            with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
+          rescue Timeout::Error
+            if @queue.size > 0
+              logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
+            else
+              logger.error "Timed out Instrumental Agent, exiting"
+            end
           end
         end
-
       end
     end
 
