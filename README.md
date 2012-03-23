@@ -89,6 +89,18 @@ after  "deploy:migrations", "instrumental:util:deploy_end"
 after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
 ```
 
+## Tracking metrics in Resque jobs (and Resque-like scenarios)
+
+If you plan on tracking metrics in your Resque jobs, you will need to explicitly flush your metrics when the jobs are finished.  You can accomplish this by adding the following code to your app initializers:
+
+```ruby
+Resque.after_perform { I.flush }
+Resque.on_failure { I.flush }
+```
+
+You're required to do this because Resque calls `exit!` when a worker has finished processing, which bypasses Ruby's `at_exit` hooks.  The Instrumental Agent installs an `at_exit` hook to flush any pending metrics to the servers, but this hook is bypassed by the `exit!` call; any other code you rely that uses `exit!` should call `I.flush` to ensure any pending metrics are correctly sent to the server before exiting the process.
+
+
 ## Troubleshooting & Help
 
 We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com), or visit the [Instrumental Support](https://fastestforward.campfirenow.com/6b934) Campfire room.

@@ -1,3 +1,9 @@
+### 0.9.5 [March 23rd, 2012]
+* Defer startup of agent thread until metrics are submitted - this update is strongly recommended for anyone using Ruby Enterprise Edition in concert w/ a preforking application server (like Phusion Passenger).  See the [REE wiki page](https://github.com/fastestforward/instrumental_agent/wiki/Using-with-Ruby-Enterprise-Edition) for more information.
+* Add .stop method for cancelling agent processing
+* Changes to how defaults are processed at initialization
+* Documentation for usage w/ Resque and Resque like scenarios
+
 ### 0.9.1 [March 6th, 2012]
 * No longer install system_timer on Ruby 1.8.x, but warn if it's not installed
 
