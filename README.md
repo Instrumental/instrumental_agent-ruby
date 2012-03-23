@@ -100,6 +100,10 @@ Resque.on_failure { I.flush }
 
 You're required to do this because Resque calls `exit!` when a worker has finished processing, which bypasses Ruby's `at_exit` hooks.  The Instrumental Agent installs an `at_exit` hook to flush any pending metrics to the servers, but this hook is bypassed by the `exit!` call; any other code you rely that uses `exit!` should call `I.flush` to ensure any pending metrics are correctly sent to the server before exiting the process.
 
+## Using with Ruby Enterprise Edition
+
+Users of Ruby Enterprise Edition should plan on using version 0.9.5 of the Instrumental Agent or greater. Please see the [REE wiki page](https://github.com/fastestforward/instrumental_agent/wiki/Using-with-Ruby-Enterprise-Edition) for more information.
+
 
 ## Troubleshooting & Help
 
