@@ -196,6 +196,15 @@ module Instrumental
       @logger ||= self.class.logger
     end
 
+    # Stopping the agent will immediately stop all communication 
+    # to Instrumental.  If you call this and submit another metric,
+    # the agent will start again.
+    #
+    # Calling stop will cause all metrics waiting to be sent to be
+    # discarded.  Don't call it unless you are expecting this behavior.
+    #
+    # agent.stop
+    #
     def stop
       disconnect
       if @thread
