@@ -138,6 +138,17 @@ describe Instrumental::Agent, "enabled in test_mode" do
     wait
     @server.commands.join("\n").should include("notice #{tm.to_i} 0 Test note")
   end
+
+  it "should allow outgoing metrics to be stopped" do
+    tm = Time.now
+    @agent.increment("foo.bar", 1, tm)
+    @agent.stop
+    wait
+    @agent.increment("foo.baz", 1, tm)
+    wait
+    @server.commands.join("\n").should include("increment foo.baz 1 #{tm.to_i}")
+    @server.commands.join("\n").should_not include("increment foo.bar 1 #{tm.to_i}")
+  end
 end
 
 describe Instrumental::Agent, "enabled" do
@@ -344,6 +355,17 @@ describe Instrumental::Agent, "enabled" do
     @agent.notice("Test note\n").should be_nil
     wait
     @server.commands.join("\n").should_not include("notice Test note")
+  end
+
+  it "should allow outgoing metrics to be stopped" do
+    tm = Time.now
+    @agent.increment("foo.bar", 1, tm)
+    @agent.stop
+    wait
+    @agent.increment("foo.baz", 1, tm)
+    wait
+    @server.commands.join("\n").should include("increment foo.baz 1 #{tm.to_i}")
+    @server.commands.join("\n").should_not include("increment foo.bar 1 #{tm.to_i}")
   end
 
   it "should allow flushing pending values to the server" do
