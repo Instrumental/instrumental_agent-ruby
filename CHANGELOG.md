@@ -1,3 +1,7 @@
+### 0.9.6 [April 5th, 2012]
+* Documentation on reliable collection in Resque jobs
+* Fix for dead lock issuew
+
 ### 0.9.5 [March 23rd, 2012]
 * Defer startup of agent thread until metrics are submitted - this update is strongly recommended for anyone using Ruby Enterprise Edition in concert w/ a preforking application server (like Phusion Passenger).  See the [REE wiki page](https://github.com/fastestforward/instrumental_agent/wiki/Using-with-Ruby-Enterprise-Edition) for more information.
 * Add .stop method for cancelling agent processing
