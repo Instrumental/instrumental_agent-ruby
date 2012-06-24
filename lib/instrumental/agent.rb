@@ -182,7 +182,7 @@ module Instrumental
       queue_message('flush', {
         :synchronous => true,
         :allow_reconnect => allow_reconnect
-      })
+      }) if running?
     end
 
     def enabled?
