@@ -1,3 +1,7 @@
+### 0.9.10 [June 29th, 2012]
+* Fix flush command when there's nothing to flush
+* Support system_timer and SystemTimer gems.
+
 ### 0.9.6 [April 5th, 2012]
 * Documentation on reliable collection in Resque jobs
 * Fix for dead lock issuew
