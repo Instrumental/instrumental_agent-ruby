@@ -335,7 +335,7 @@ module Instrumental
       logger.info "connecting to collector"
       @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
       logger.info "connected to collector at #{host}:#{port}"
-      send_with_reply_timeout "hello version #{Instrumental::VERSION}"
+      send_with_reply_timeout "hello version #{Instrumental::VERSION} hostname #{Socket.gethostname}"
       send_with_reply_timeout "authenticate #{@api_key}"
       @failures = 0
       loop do
