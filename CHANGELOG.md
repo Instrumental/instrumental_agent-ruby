@@ -1,3 +1,6 @@
+### 0.10.0 [July 6th, 2012]
+* Remove test mode
+
 ### 0.9.11 [July 6th, 2012]
 * Allow at_exit handler to be called manually for better Resque integration
 * Improved error logging
