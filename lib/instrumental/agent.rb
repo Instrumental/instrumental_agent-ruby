@@ -407,19 +407,6 @@ module Instrumental
       disconnect
     end
 
-    def clear_queue
-      loop do
-        command_and_args, command_options = @queue.pop(true)
-        return unless command_and_args
-        sync_resource = command_options && command_options[:sync_resource]
-        if sync_resource
-          @sync_mutex.synchronize do
-            sync_resource.signal
-          end
-        end
-      end
-    end
-
     def setup_cleanup_at_exit
       at_exit do
         cleanup
