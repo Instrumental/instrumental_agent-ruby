@@ -1,3 +1,7 @@
+### 0.9.11 [July 6th, 2012]
+* Allow at_exit handler to be called manually for better Resque integration
+* Improved error logging
+
 ### 0.9.10 [June 29th, 2012]
 * Fix flush command when there's nothing to flush
 * Support system_timer and SystemTimer gems.
