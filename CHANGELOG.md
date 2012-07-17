@@ -1,3 +1,6 @@
+### 0.10.14 [July 16th, 2012]
+* Fix issue with Etc not being required
+
 ### 0.10.0 [July 6th, 2012]
 * Remove test mode
 
