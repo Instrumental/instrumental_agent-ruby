@@ -1,3 +1,6 @@
+### 0.11.0 [July 18th, 2012]
+* Allow passing count to increment and gauge calls for pre-aggregated values
+
 ### 0.10.1 [July 16th, 2012]
 * Fix issue with Etc not being required
 
