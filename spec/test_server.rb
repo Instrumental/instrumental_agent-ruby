@@ -22,7 +22,7 @@ class TestServer
 
   def listen
     @port ||= 10001
-    @server = TCPServer.new(port)
+    @server = TCPServer.new(@port)
     @main_thread = Thread.new do
       begin
         # puts "listening"
@@ -66,9 +66,8 @@ class TestServer
       end
     end
     # puts "server up"
-  rescue Exception => err
-    # FIXME: doesn't seem to be detecting failures of listen
-    puts "failed to get port"
+  rescue Errno::EADDRINUSE => err
+    puts "#{err.inspect} failed to get port #{@port}"
     puts err.message
     @port += 1
     retry
