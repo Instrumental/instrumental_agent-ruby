@@ -89,7 +89,7 @@ describe Instrumental::Agent, "enabled" do
     now = Time.now
     @agent.gauge('gauge_test', 123)
     wait
-    @server.commands.last.should == "gauge gauge_test 123 #{now.to_i}"
+    @server.commands.last.should == "gauge gauge_test 123 #{now.to_i} 1"
   end
 
   it "should report a time as gauge and return the block result" do
@@ -111,14 +111,14 @@ describe Instrumental::Agent, "enabled" do
   it "should report a gauge with a set time" do
     @agent.gauge('gauge_test', 123, 555)
     wait
-    @server.commands.last.should == "gauge gauge_test 123 555"
+    @server.commands.last.should == "gauge gauge_test 123 555 1"
   end
 
   it "should report an increment" do
     now = Time.now
     @agent.increment("increment_test")
     wait
-    @server.commands.last.should == "increment increment_test 1 #{now.to_i}"
+    @server.commands.last.should == "increment increment_test 1 #{now.to_i} 1"
   end
 
   it "should return the value incremented by" do
@@ -132,13 +132,13 @@ describe Instrumental::Agent, "enabled" do
     now = Time.now
     @agent.increment("increment_test", 2)
     wait
-    @server.commands.last.should == "increment increment_test 2 #{now.to_i}"
+    @server.commands.last.should == "increment increment_test 2 #{now.to_i} 1"
   end
 
   it "should report an increment with a set time" do
     @agent.increment('increment_test', 1, 555)
     wait
-    @server.commands.last.should == "increment increment_test 1 555"
+    @server.commands.last.should == "increment increment_test 1 555 1"
   end
 
   it "should discard data that overflows the buffer" do
@@ -147,11 +147,11 @@ describe Instrumental::Agent, "enabled" do
         @agent.increment('overflow_test', i + 1, 300)
       end
       wait
-      @server.commands.should     include("increment overflow_test 1 300")
-      @server.commands.should     include("increment overflow_test 2 300")
-      @server.commands.should     include("increment overflow_test 3 300")
-      @server.commands.should_not include("increment overflow_test 4 300")
-      @server.commands.should_not include("increment overflow_test 5 300")
+      @server.commands.should     include("increment overflow_test 1 300 1")
+      @server.commands.should     include("increment overflow_test 2 300 1")
+      @server.commands.should     include("increment overflow_test 3 300 1")
+      @server.commands.should_not include("increment overflow_test 4 300 1")
+      @server.commands.should_not include("increment overflow_test 5 300 1")
     end
   end
 
@@ -163,11 +163,11 @@ describe Instrumental::Agent, "enabled" do
       end
       @agent.instance_variable_get(:@queue).size.should == 0
       wait # let the server receive the commands
-      @server.commands.should include("increment overflow_test 1 300")
-      @server.commands.should include("increment overflow_test 2 300")
-      @server.commands.should include("increment overflow_test 3 300")
-      @server.commands.should include("increment overflow_test 4 300")
-      @server.commands.should include("increment overflow_test 5 300")
+      @server.commands.should include("increment overflow_test 1 300 1")
+      @server.commands.should include("increment overflow_test 2 300 1")
+      @server.commands.should include("increment overflow_test 3 300 1")
+      @server.commands.should include("increment overflow_test 4 300 1")
+      @server.commands.should include("increment overflow_test 5 300 1")
     end
   end
 
@@ -181,9 +181,9 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
     wait
     @server.connect_count.should == 2
-    @server.commands.should include("increment fork_reconnect_test 1 2")
-    @server.commands.should include("increment fork_reconnect_test 1 3")
-    @server.commands.should include("increment fork_reconnect_test 1 4")
+    @server.commands.should include("increment fork_reconnect_test 1 2 1")
+    @server.commands.should include("increment fork_reconnect_test 1 3 1")
+    @server.commands.should include("increment fork_reconnect_test 1 4 1")
   end
 
   it "should never let an exception reach the user" do
@@ -298,7 +298,7 @@ describe Instrumental::Agent, "connection problems" do
     @agent.increment('reconnect_test', 1, 5678) # triggers reconnect
     wait
     @server.connect_count.should == 2
-    @server.commands.last.should == "increment reconnect_test 1 5678"
+    @server.commands.last.should == "increment reconnect_test 1 5678 1"
   end
 
   it "should buffer commands when server is down" do
@@ -307,7 +307,7 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
   end
 
   it "should buffer commands when server is not responsive" do
@@ -316,7 +316,7 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
   end
 
   it "should buffer commands when authentication fails" do
@@ -325,7 +325,7 @@ describe Instrumental::Agent, "connection problems" do
     wait
     @agent.increment('reconnect_test', 1, 1234)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234\n")
+    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
   end
 
   it "should send commands in a short-lived process" do
@@ -333,7 +333,7 @@ describe Instrumental::Agent, "connection problems" do
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
     if pid = fork { @agent.increment('foo', 1, 1234) }
       Process.wait(pid)
-      @server.commands.last.should == "increment foo 1 1234"
+      @server.commands.last.should == "increment foo 1 1234 1"
     end
   end
 
@@ -342,7 +342,7 @@ describe Instrumental::Agent, "connection problems" do
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
     if pid = fork { @agent.increment('foo', 1, 1234); @agent.cleanup; exit! }
       Process.wait(pid)
-      @server.commands.last.should == "increment foo 1 1234"
+      @server.commands.last.should == "increment foo 1 1234 1"
     end
   end
 
@@ -393,11 +393,11 @@ describe Instrumental::Agent, "enabled with sync option" do
         @agent.increment('overflow_test', i + 1, 300)
       end
       wait # let the server receive the commands
-      @server.commands.should include("increment overflow_test 1 300")
-      @server.commands.should include("increment overflow_test 2 300")
-      @server.commands.should include("increment overflow_test 3 300")
-      @server.commands.should include("increment overflow_test 4 300")
-      @server.commands.should include("increment overflow_test 5 300")
+      @server.commands.should include("increment overflow_test 1 300 1")
+      @server.commands.should include("increment overflow_test 2 300 1")
+      @server.commands.should include("increment overflow_test 3 300 1")
+      @server.commands.should include("increment overflow_test 4 300 1")
+      @server.commands.should include("increment overflow_test 5 300 1")
     end
   end
 
