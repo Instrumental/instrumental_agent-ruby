@@ -104,9 +104,9 @@ module Instrumental
     # Store a gauge for a metric, optionally at a specific time.
     #
     #  agent.gauge('load', 1.23)
-    def gauge(metric, value, time = Time.now)
-      if valid?(metric, value, time) &&
-          send_command("gauge", metric, value, time.to_i)
+    def gauge(metric, value, time = Time.now, count = 1)
+      if valid?(metric, value, time, count) &&
+          send_command("gauge", metric, value, time.to_i, count.to_i)
         value
       else
         nil
@@ -152,9 +152,9 @@ module Instrumental
     # Increment a metric, optionally more than one or at a specific time.
     #
     #  agent.increment('users')
-    def increment(metric, value = 1, time = Time.now)
-      if valid?(metric, value, time) &&
-          send_command("increment", metric, value, time.to_i)
+    def increment(metric, value = 1, time = Time.now, count = 1)
+      if valid?(metric, value, time, count) &&
+          send_command("increment", metric, value, time.to_i, count.to_i)
         value
       else
         nil
@@ -258,7 +258,7 @@ module Instrumental
       note !~ /[\n\r]/
     end
 
-    def valid?(metric, value, time)
+    def valid?(metric, value, time, count)
       valid_metric = metric =~ /^([\d\w\-_]+\.)*[\d\w\-_]+$/i
       valid_value  = value.to_s =~ /^-?\d+(\.\d+)?(e-\d+)?$/
 
