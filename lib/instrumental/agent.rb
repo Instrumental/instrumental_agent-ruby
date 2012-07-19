@@ -384,8 +384,8 @@ module Instrumental
         end
       end
     rescue Exception => err
-      logger.debug err.to_s
-      logger.debug err.backtrace.join("\n")
+      logger.error "Instrumental Error: #{err}"
+      logger.error err.backtrace.join("\n")
       if @allow_reconnect == false ||
         (command_options && command_options[:allow_reconnect] == false)
         logger.error "Not trying to reconnect"
