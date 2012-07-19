@@ -1,3 +1,6 @@
+### 0.11.1 [July 19th, 2012]
+* Make error messages easily locatable in logs
+
 ### 0.11.0 [July 18th, 2012]
 * Allow passing count to increment and gauge calls for pre-aggregated values
 
