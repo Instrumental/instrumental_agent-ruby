@@ -1,5 +1,4 @@
 require 'instrumental/version'
-require 'instrumental/rack/middleware'
 require 'instrumental/system_timer'
 require 'logger'
 require 'thread'
