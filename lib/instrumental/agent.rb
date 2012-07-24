@@ -64,16 +64,6 @@ module Instrumental
       @logger
     end
 
-    def self.all
-      @agents ||= []
-    end
-
-    def self.new(*args)
-      inst = super
-      all << inst
-      inst
-    end
-
     # Sets up a connection to the collector.
     #
     #  Instrumental::Agent.new(API_KEY)
