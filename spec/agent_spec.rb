@@ -340,6 +340,21 @@ describe Instrumental::Agent, "connection problems" do
     @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
   end
 
+  it "should warn once when buffer is full" do
+    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+      @server = TestServer.new(:listen => false)
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+      wait
+      @agent.logger.should_receive(:warn).with(/Queue full/).once
+
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+    end
+  end
+
   it "should send commands in a short-lived process" do
     @server = TestServer.new
     @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)

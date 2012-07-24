@@ -245,10 +245,15 @@ module Instrumental
 
         cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
         if @queue.size < MAX_BUFFER
+          @queue_full_warning = false
           logger.debug "Queueing: #{cmd.chomp}"
           queue_message(cmd, { :synchronous => @synchronous })
         else
-          logger.warn "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
+          if !@queue_full_warning
+            @queue_full_warning = true
+            logger.warn "Queue full(#{@queue.size}), dropping commands..."
+          end
+          logger.debug "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
           nil
         end
       end
