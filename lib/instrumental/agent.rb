@@ -160,7 +160,7 @@ module Instrumental
     end
 
     def logger
-      @logger ||= self.class.logger
+      @logger || self.class.logger
     end
 
     # Stopping the agent will immediately stop all communication
