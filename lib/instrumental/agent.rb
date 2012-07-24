@@ -6,9 +6,6 @@ require 'thread'
 require 'socket'
 
 
-# Sets up a connection to the collector.
-#
-#  Instrumental::Agent.new(API_KEY)
 module Instrumental
   class Agent
     BACKOFF = 2.0
