@@ -275,9 +275,8 @@ module Instrumental
     end
 
     def test_connection
-      # FIXME: Test connection state hack
       begin
-        @socket.read_nonblock(1) # TODO: put data back?
+        @socket.read_nonblock(1)
       rescue Errno::EAGAIN
         # noop
       end
