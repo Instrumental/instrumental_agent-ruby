@@ -76,7 +76,7 @@ describe Instrumental::Agent, "enabled" do
   it "should announce itself, and include version" do
     @agent.increment("test.foo")
     wait
-    @server.commands[0].should =~ /hello .*version .* hostname .*/
+    @server.commands[0].should =~ /hello .*version .* hostname .* pid .*/
   end
 
   it "should authenticate using the token" do
