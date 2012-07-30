@@ -1,3 +1,10 @@
+### 0.12.0 [July 30th, 2012]
+* Add timeout to socket flush, fixes rare issue on REE/Linux
+* Send only one buffer full warning
+* Agent instances use global logger more consistently
+* Minor code cleanups
+* Remove rack-middleware
+
 ### 0.11.1 [July 19th, 2012]
 * Make error messages easily locatable in logs
 
