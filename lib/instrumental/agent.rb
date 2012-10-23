@@ -235,8 +235,7 @@ module Instrumental
     end
 
     def report_exception(e)
-      logger.error "Exception occurred: #{e.message}"
-      logger.error e.backtrace.join("\n")
+      logger.error "Exception occurred: #{e.message}\n#{e.backtrace.join("\n")}"
     end
 
     def send_command(cmd, *args)
