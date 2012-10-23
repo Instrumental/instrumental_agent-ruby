@@ -344,7 +344,7 @@ module Instrumental
     rescue Exception => err
       if err.is_a?(EOFError)
         # nop
-      elsif Errno::ECONNREFUSED
+      elsif err.is_a?(Errno::ECONNREFUSED)
         logger.error "unable to connect to Instrumental."
       else
         report_exception(err)
