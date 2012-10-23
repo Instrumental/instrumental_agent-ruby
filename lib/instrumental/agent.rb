@@ -347,8 +347,7 @@ module Instrumental
       elsif Errno::ECONNREFUSED
         logger.error "unable to connect to Instrumental."
       else
-        logger.error "Instrumental Error: #{err}"
-        logger.error err.backtrace.join("\n")
+        report_exception(err)
       end
       if @allow_reconnect == false ||
         (command_options && command_options[:allow_reconnect] == false)
