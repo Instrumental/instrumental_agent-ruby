@@ -1,3 +1,7 @@
+### 0.12.1 [July 30th, 2012]
+* Hide unnecessary logging for normal/common exceptions
+* LICENSE
+
 ### 0.12.0 [July 30th, 2012]
 * Add timeout to socket flush, fixes rare issue on REE/Linux
 * Send only one buffer full warning
