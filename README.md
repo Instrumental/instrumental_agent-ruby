@@ -10,7 +10,7 @@ Add the gem to your Gemfile.
 gem 'instrumental_agent'
 ```
 
-Visit [instrumentalapp.com](instrumentalapp.com) and create an account, then  initialize the agent with your API key, found in the Docs section.
+Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then  initialize the agent with your API key, found in the Docs section.
 
 ```sh
 I = Instrumental::Agent.new('YOUR_API_KEY', :enabled => Rails.env.production?)
