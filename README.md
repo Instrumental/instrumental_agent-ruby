@@ -1,6 +1,6 @@
 # Instrumental Agent
 
-Instrument anything.
+Measure your application in real time.
 
 ## Setup & Usage
 
