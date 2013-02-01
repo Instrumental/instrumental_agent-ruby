@@ -10,10 +10,10 @@ Add the gem to your Gemfile.
 gem 'instrumental_agent'
 ```
 
-Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then  initialize the agent with your API key, found in the Docs section.
+Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then  initialize the agent with your project token, found in the Docs section.
 
 ```sh
-I = Instrumental::Agent.new('YOUR_API_KEY', :enabled => Rails.env.production?)
+I = Instrumental::Agent.new('YOUR_PROJECT_TOKEN', :enabled => Rails.env.production?)
 ```
 
 You'll  probably want something like the above, only enabling the agent in production mode so you don't have development and production data writing to the same value. Or you can setup two projects, so that you can verify stats in one, and release them to production in another.
@@ -73,10 +73,10 @@ Need to quickly disable the agent? set :enabled to false on initialization and y
 
 ## Capistrano Integration
 
-Add `require "instrumental/capistrano"` to your capistrano configuration and your deploys will be tracked by Instrumental.  Add the API token for the project you want to track to by setting the following Capistrano var:
+Add `require "instrumental/capistrano"` to your capistrano configuration and your deploys will be tracked by Instrumental.  Add the project token for the project you want to track to by setting the following Capistrano var:
 
 ```ruby
-set :instrumental_key, "MY_API_KEY"
+set :instrumental_key, "MY_PROJECT_TOKEN"
 ```
 
 The following configuration will be added:

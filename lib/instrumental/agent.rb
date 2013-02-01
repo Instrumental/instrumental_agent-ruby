@@ -31,9 +31,9 @@ module Instrumental
 
     # Sets up a connection to the collector.
     #
-    #  Instrumental::Agent.new(API_KEY)
-    #  Instrumental::Agent.new(API_KEY, :collector => 'hostname:port')
-    def initialize(api_key, options = {})
+    #  Instrumental::Agent.new(PROJECT_TOKEN)
+    #  Instrumental::Agent.new(PROJECT_TOKEN, :collector => 'hostname:port')
+    def initialize(project_token, options = {})
       # symbolize options keys
       options.replace(
         options.inject({}) { |m, (k, v)| m[(k.to_sym rescue k) || k] = v; m }
@@ -44,7 +44,7 @@ module Instrumental
       # port:        8000
       # enabled:     true
       # synchronous: false
-      @api_key         = api_key
+      @project_token   = project_token
       @host, @port     = options[:collector].to_s.split(':')
       @host          ||= 'instrumentalapp.com'
       @port            = (@port || 8000).to_i
@@ -317,7 +317,7 @@ module Instrumental
       @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
       logger.info "connected to collector at #{host}:#{port}"
       send_with_reply_timeout "hello version #{Instrumental::VERSION} hostname #{Socket.gethostname} pid #{Process.pid}"
-      send_with_reply_timeout "authenticate #{@api_key}"
+      send_with_reply_timeout "authenticate #{@project_token}"
       @failures = 0
       loop do
         command_and_args, command_options = @queue.pop
