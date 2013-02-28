@@ -89,6 +89,8 @@ after  "deploy:migrations", "instrumental:util:deploy_end"
 after  "instrumental:util:deploy_end", "instrumental:record_deploy_notice"
 ```
 
+The default message sent is "USER deployed COMMIT_HASH". If you need to customize it, set a capistrano variable named `deploy_message` to the value you'd prefer.
+
 ## Tracking metrics in Resque jobs (and Resque-like scenarios)
 
 If you plan on tracking metrics in Resque jobs, you will need to explicitly cleanup after the agent when the jobs are finished.  You can accomplish this by adding `after_perform` and `on_failure` hooks to your Resque jobs.  See the Resque [hooks documentation](https://github.com/defunkt/resque/blob/master/docs/HOOKS.md) for more information.

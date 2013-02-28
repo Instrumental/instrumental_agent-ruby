@@ -1,3 +1,6 @@
+### 0.12.2 [February 28th, 2013]
+* Allow customization of Capistrano deploy message
+
 ### 0.12.1 [July 30th, 2012]
 * Hide unnecessary logging for normal/common exceptions
 * LICENSE

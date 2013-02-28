@@ -26,7 +26,12 @@ if Capistrano::Configuration.instance
         agent_options = { :synchronous => true }
         agent_options[:collector] = instrumental_host if exists?(:instrumental_host)
         agent = Instrumental::Agent.new(instrumental_key, agent_options)
-        agent.notice("#{deployer} deployed #{current_revision}",
+        message = if exists?(:deploy_message)
+          deploy_message
+        else
+          "#{deployer} deployed #{current_revision}"
+        end
+        agent.notice(message,
                      start_at,
                      deploy_duration_in_seconds)
         logger.info("Notified Instrumental of deployment")
