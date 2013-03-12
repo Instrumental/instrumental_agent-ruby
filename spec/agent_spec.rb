@@ -1,14 +1,14 @@
 require 'spec_helper'
 
 def wait
-  sleep 0.2 # FIXME: hack
+  sleep 0.3 # FIXME: hack
 end
 
 describe Instrumental::Agent, "disabled" do
   before do
     Instrumental::Agent.logger.level = Logger::UNKNOWN
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :enabled => false)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :enabled => false)
   end
 
   after do
@@ -53,7 +53,7 @@ end
 describe Instrumental::Agent, "enabled" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url, :synchronous => false)
   end
 
   after do
@@ -73,23 +73,23 @@ describe Instrumental::Agent, "enabled" do
     @server.connect_count.should == 1
   end
 
-  it "should announce itself, and include version" do
+  it "should send authentication, user agent and hostname info" do
     @agent.increment("test.foo")
     wait
-    @server.commands[0].should =~ /hello .*version .* hostname .* pid .*/
+    auth, agent, host = @server.connections.first
+    auth.should == 'test_token'
+    agent.should =~ /^Instrumental.Agent.Ruby,[\d\.]+$/
+    host.should == Socket.gethostname
   end
 
-  it "should authenticate using the token" do
-    @agent.increment("test.foo")
-    wait
-    @server.commands[1].should == "authenticate test_token"
-  end
 
   it "should report a gauge" do
     now = Time.now
     @agent.gauge('gauge_test', 123)
     wait
-    @server.commands.last.should == "gauge gauge_test 123 #{now.to_i} 1"
+    @server.commands.last.should == {
+      'gauge' => ["gauge_test 123 #{now.to_i} 1"]
+    }
   end
 
   it "should report a time as gauge and return the block result" do
@@ -98,7 +98,7 @@ describe Instrumental::Agent, "enabled" do
       1 + 1
     end.should == 2
     wait
-    @server.commands.last.should =~ /gauge time_value_test .* #{now.to_i}/
+    @server.commands.last["gauge"].first.should =~ /time_value_test .* #{now.to_i}/
   end
 
   it "should return the value gauged" do
@@ -111,20 +111,20 @@ describe Instrumental::Agent, "enabled" do
   it "should report a gauge with a set time" do
     @agent.gauge('gauge_test', 123, 555)
     wait
-    @server.commands.last.should == "gauge gauge_test 123 555 1"
+    @server.commands.last["gauge"].first.should == "gauge_test 123 555 1"
   end
 
   it "should report a gauge with a set time and count" do
     @agent.gauge('gauge_test', 123, 555, 111)
     wait
-    @server.commands.last.should == "gauge gauge_test 123 555 111"
+    @server.commands.last["gauge"].first.should == "gauge_test 123 555 111"
   end
 
   it "should report an increment" do
     now = Time.now
     @agent.increment("increment_test")
     wait
-    @server.commands.last.should == "increment increment_test 1 #{now.to_i} 1"
+    @server.commands.last["increment"].first.should == "increment_test 1 #{now.to_i} 1"
   end
 
   it "should return the value incremented by" do
@@ -138,19 +138,19 @@ describe Instrumental::Agent, "enabled" do
     now = Time.now
     @agent.increment("increment_test", 2)
     wait
-    @server.commands.last.should == "increment increment_test 2 #{now.to_i} 1"
+    @server.commands.last["increment"].first.should == "increment_test 2 #{now.to_i} 1"
   end
 
   it "should report an increment with a set time" do
     @agent.increment('increment_test', 1, 555)
     wait
-    @server.commands.last.should == "increment increment_test 1 555 1"
+    @server.commands.last["increment"].first.should == "increment_test 1 555 1"
   end
 
   it "should report an increment with a set time and count" do
     @agent.increment('increment_test', 1, 555, 111)
     wait
-    @server.commands.last.should == "increment increment_test 1 555 111"
+    @server.commands.last["increment"].first.should == "increment_test 1 555 111"
   end
 
   it "should discard data that overflows the buffer" do
@@ -159,11 +159,14 @@ describe Instrumental::Agent, "enabled" do
         @agent.increment('overflow_test', i + 1, 300)
       end
       wait
-      @server.commands.should     include("increment overflow_test 1 300 1")
-      @server.commands.should     include("increment overflow_test 2 300 1")
-      @server.commands.should     include("increment overflow_test 3 300 1")
-      @server.commands.should_not include("increment overflow_test 4 300 1")
-      @server.commands.should_not include("increment overflow_test 5 300 1")
+      values = @server.commands.collect do |command|
+        command["increment"]
+      end.flatten
+      values.should     include("overflow_test 1 300 1")
+      values.should     include("overflow_test 2 300 1")
+      values.should     include("overflow_test 3 300 1")
+      values.should_not include("overflow_test 4 300 1")
+      values.should_not include("overflow_test 5 300 1")
     end
   end
 
@@ -175,27 +178,33 @@ describe Instrumental::Agent, "enabled" do
       end
       @agent.instance_variable_get(:@queue).size.should == 0
       wait # let the server receive the commands
-      @server.commands.should include("increment overflow_test 1 300 1")
-      @server.commands.should include("increment overflow_test 2 300 1")
-      @server.commands.should include("increment overflow_test 3 300 1")
-      @server.commands.should include("increment overflow_test 4 300 1")
-      @server.commands.should include("increment overflow_test 5 300 1")
+      values = @server.commands.collect do |command|
+        command["increment"]
+      end.flatten
+      values.should include("overflow_test 1 300 1")
+      values.should include("overflow_test 2 300 1")
+      values.should include("overflow_test 3 300 1")
+      values.should include("overflow_test 4 300 1")
+      values.should include("overflow_test 5 300 1")
     end
   end
 
   it "should automatically reconnect when forked" do
     wait
     @agent.increment('fork_reconnect_test', 1, 2)
-    fork do
+    pid = fork do
       @agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
     end
     wait
     @agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
     wait
-    @server.connect_count.should == 2
-    @server.commands.should include("increment fork_reconnect_test 1 2 1")
-    @server.commands.should include("increment fork_reconnect_test 1 3 1")
-    @server.commands.should include("increment fork_reconnect_test 1 4 1")
+    @server.connect_count.should >= 2
+    values = @server.commands.collect do |command|
+      command["increment"]
+    end.flatten
+    values.should include("fork_reconnect_test 1 2 1")
+    values.should include("fork_reconnect_test 1 3 1")
+    values.should include("fork_reconnect_test 1 4 1")
   end
 
   it "should never let an exception reach the user" do
@@ -223,7 +232,7 @@ describe Instrumental::Agent, "enabled" do
     @agent.logger.should_receive(:warn).with(/%%/)
     @agent.increment(' %% .!#@$%^&*', 1, 1)
     wait
-    @server.commands.join("\n").should include("increment agent.invalid_metric")
+    @server.commands.last["increment"].first.should =~ /agent.invalid_metric/
   end
 
   it "should allow reasonable metric names" do
@@ -232,14 +241,14 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment('hello.world')
     @agent.increment('ThisIsATest.Of.The.Emergency.Broadcast.System.12345')
     wait
-    @server.commands.join("\n").should_not include("increment agent.invalid_metric")
+    @server.commands.last["increment"].all? { |cmd| cmd !~ /agent.invalid_metric/ }.should be_true
   end
 
   it "should track invalid values" do
     @agent.logger.should_receive(:warn).with(/hello.*testington/)
     @agent.increment('testington', 'hello')
     wait
-    @server.commands.join("\n").should include("increment agent.invalid_value")
+    @server.commands.last["increment"].first.should =~ /agent.invalid_value/
   end
 
   it "should allow reasonable values" do
@@ -252,20 +261,20 @@ describe Instrumental::Agent, "enabled" do
     @agent.increment('a',  333.333)
     @agent.increment('a',  Float::EPSILON)
     wait
-    @server.commands.join("\n").should_not include("increment agent.invalid_value")
+    @server.commands.last["increment"].all? { |cmd| cmd !~ /agent.invalid_value/ }.should be_true
   end
 
   it "should send notices to the server" do
     tm = Time.now
     @agent.notice("Test note", tm)
     wait
-    @server.commands.join("\n").should include("notice #{tm.to_i} 0 Test note")
+    @server.commands.last["notice"].should include("#{tm.to_i} 0 Test note")
   end
 
   it "should prevent a note w/ newline characters from being sent to the server" do
     @agent.notice("Test note\n").should be_nil
     wait
-    @server.commands.join("\n").should_not include("notice Test note")
+    @server.commands.last.should be_nil
   end
 
   it "should allow outgoing metrics to be stopped" do
@@ -275,8 +284,8 @@ describe Instrumental::Agent, "enabled" do
     wait
     @agent.increment("foo.baz", 1, tm)
     wait
-    @server.commands.join("\n").should include("increment foo.baz 1 #{tm.to_i}")
-    @server.commands.join("\n").should_not include("increment foo.bar 1 #{tm.to_i}")
+    @server.commands.last["increment"].should include("foo.baz 1 #{tm.to_i} 1")
+    @server.commands.last["increment"].should_not include("foo.bar 1 #{tm.to_i} 1")
   end
 
   it "should allow flushing pending values to the server" do
@@ -285,7 +294,7 @@ describe Instrumental::Agent, "enabled" do
     @agent.flush
     @agent.instance_variable_get(:@queue).size.should ==  0
     wait
-    @server.commands.grep(/^gauge a /).size.should == 100
+    @server.commands.last["gauge"].grep(/^a /).size.should == 100
   end
 
   it "should no op on an empty flush" do

@@ -14,6 +14,8 @@ Gem::Specification.new do |s|
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
+
+  s.add_dependency(%q<json>, [">= 1.7"])
   s.add_development_dependency(%q<rake>, [">= 0"])
   s.add_development_dependency(%q<rspec>, ["~> 2.0"])
   s.add_development_dependency(%q<fuubar>, [">= 0"])

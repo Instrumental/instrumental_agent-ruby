@@ -1,18 +1,23 @@
 require 'instrumental/version'
+require 'instrumental/ssl'
 require 'instrumental/system_timer'
+require 'json'
 require 'logger'
+require 'net/http'
 require 'thread'
-require 'socket'
-
+require 'uri'
+require 'zlib'
 
 module Instrumental
   class Agent
-    BACKOFF = 2.0
-    MAX_RECONNECT_DELAY = 15
-    MAX_BUFFER = 5000
-    REPLY_TIMEOUT = 10
-    CONNECT_TIMEOUT = 20
-    EXIT_FLUSH_TIMEOUT = 5
+    BACKOFF               = 2.0
+    MAX_RECONNECT_DELAY   = 15
+    MAX_BUFFER            = 5000
+    REPLY_TIMEOUT         = 10
+    CONNECT_TIMEOUT       = 20
+    EXIT_FLUSH_TIMEOUT    = 5
+    SECURE_COLLECTOR_URL  = "https://collector.instrumentalapp.com/report"
+    COLLECTOR_URL         = "http://collector.instrumentalapp.com/report"
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
@@ -29,6 +34,14 @@ module Instrumental
       @logger
     end
 
+    def self.default_collector
+      ssl_available? ? SECURE_COLLECTOR_URL : COLLECTOR_URL
+    end
+
+    def self.ssl_available?
+      INSTRUMENTAL_SSL_AVAILABLE
+    end
+
     # Sets up a connection to the collector.
     #
     #  Instrumental::Agent.new(API_KEY)
@@ -40,18 +53,24 @@ module Instrumental
       )
 
       # defaults
-      # host:        instrumentalapp.com
-      # port:        8000
-      # enabled:     true
-      # synchronous: false
-      @api_key         = api_key
-      @host, @port     = options[:collector].to_s.split(':')
-      @host          ||= 'instrumentalapp.com'
-      @port            = (@port || 8000).to_i
-      @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
-      @synchronous     = !!options[:synchronous]
-      @pid             = Process.pid
-      @allow_reconnect = true
+      # collector:          https://collector.instrumentalapp.com/report
+      # reporting_interval: 10
+      # max_commands:       1024
+      # gzip:               true
+      # enabled:            true
+      # synchronous:        false
+      @api_key            = api_key
+      @uri                = URI(options[:collector] || self.class.default_collector)
+      if @uri.scheme == "https" && !self.class.ssl_available?
+        raise "SSL is not currently supported on your platform, please reinstall Ruby or specify a non https endpoint like #{COLLECTOR_URL}"
+      end
+      @reporting_interval = options[:reporting_interval] || 10
+      @max_commands       = options[:max_commands] || 1024
+      @gzip               = options[:gzip].nil? ? true : options[:gzip]
+      @enabled            = options.has_key?(:enabled) ? !!options[:enabled] : true
+      @synchronous        = !!options[:synchronous]
+      @pid                = Process.pid
+      @allow_reconnect    = true
 
       setup_cleanup_at_exit if @enabled
     end
@@ -141,7 +160,7 @@ module Instrumental
     #
     #  agent.flush
     def flush(allow_reconnect = false)
-      queue_message('flush', {
+      queue_message(nil, {
         :synchronous => true,
         :allow_reconnect => allow_reconnect
       }) if running?
@@ -173,7 +192,10 @@ module Instrumental
     # agent.stop
     #
     def stop
-      disconnect
+      if @timer
+        @timer.kill
+        @timer = nil
+      end
       if @thread
         @thread.kill
         @thread = nil
@@ -189,7 +211,8 @@ module Instrumental
         logger.info "Cleaning up agent, queue size: #{@queue.size}, thread running: #{@thread.alive?}"
         @allow_reconnect = false
         if @queue.size > 0
-          queue_message('exit')
+          queue_message(nil, { :exit => true })
+          @thread.wakeup
           begin
             with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
           rescue Timeout::Error
@@ -242,17 +265,17 @@ module Instrumental
       if enabled?
         start_connection_worker if !running?
 
-        cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
+        cmd = [cmd, args.collect { |a| a.to_s }.join(" ")]
         if @queue.size < MAX_BUFFER
           @queue_full_warning = false
-          logger.debug "Queueing: #{cmd.chomp}"
+          logger.debug "Queueing: #{cmd.inspect}"
           queue_message(cmd, { :synchronous => @synchronous })
         else
           if !@queue_full_warning
             @queue_full_warning = true
             logger.warn "Queue full(#{@queue.size}), dropping commands..."
           end
-          logger.debug "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
+          logger.debug "Dropping command, queue full(#{@queue.size}): #{cmd.inspect}"
           nil
         end
       end
@@ -269,6 +292,7 @@ module Instrumental
           options[:sync_resource] ||= ConditionVariable.new
           @sync_mutex.synchronize {
             @queue << [message, options]
+            @thread.wakeup
             options[:sync_resource].wait(@sync_mutex)
           }
         else
@@ -278,67 +302,108 @@ module Instrumental
       message
     end
 
-    def test_connection
-      begin
-        @socket.read_nonblock(1)
-      rescue Errno::EAGAIN
-        # noop
-      end
-    end
-
     def start_connection_worker
       if enabled?
-        disconnect
-        @pid = Process.pid
-        @queue = Queue.new
-        @sync_mutex = Mutex.new
-        @failures = 0
-        logger.info "Starting thread"
+        @pid         = Process.pid
+        @queue       = Queue.new
+        @sync_mutex  = Mutex.new
+        @failures    = 0
+
+        logger.info "Starting threads"
         @thread = Thread.new do
           run_worker_loop
+        end
+        @timer = Thread.new(@reporting_interval, @thread) do |reporting_interval, wakeup_thread|
+          run_timer_loop(reporting_interval, wakeup_thread)
         end
       end
     end
 
-    def send_with_reply_timeout(message)
-      @socket.puts message
-      with_timeout(REPLY_TIMEOUT) do
-        response = @socket.gets
-        if response.to_s.chomp != "ok"
-          raise "Bad Response #{response.inspect} to #{message.inspect}"
+    def run_timer_loop(interval, target_thread)
+      loop do
+        sleep(interval)
+        if target_thread.alive?
+          target_thread.wakeup
+        else
+          return
         end
       end
     end
 
     def run_worker_loop
-      command_and_args = nil
-      command_options = nil
-      logger.info "connecting to collector"
-      @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
-      logger.info "connected to collector at #{host}:#{port}"
-      send_with_reply_timeout "hello version #{Instrumental::VERSION} hostname #{Socket.gethostname} pid #{Process.pid}"
-      send_with_reply_timeout "authenticate #{@api_key}"
       @failures = 0
+      queued_commands = []
       loop do
-        command_and_args, command_options = @queue.pop
-        sync_resource = command_options && command_options[:sync_resource]
-        test_connection
-        case command_and_args
-        when 'exit'
+        has_ssl            = self.class.ssl_available?
+        http               = Net::HTTP.new(@uri.host, @uri.port)
+        http.use_ssl       = @uri.scheme == "https" if has_ssl
+        http.open_timeout  = CONNECT_TIMEOUT
+        http.ssl_timeout   = CONNECT_TIMEOUT
+        http.read_timeout  = REPLY_TIMEOUT
+        if has_ssl && http.use_ssl?
+          http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+          http.ca_file     = "some-bundled-ca-file" # TODO
+        end
+        outgoing = {}
+        syncs = []
+        exit_loop = false
+        while @queue.size > 0 && outgoing.size < @max_commands
+          command_and_args, command_options = @queue.pop
+          if (sync_resource = command_options && command_options[:sync_resource])
+            syncs << sync_resource
+          end
+          case command_and_args
+          when nil
+            if command_options[:exit]
+              exit_loop = true
+              break
+            end
+          when Array
+            queued_commands << command_and_args
+            command, args = command_and_args
+            logger.debug "Sending: #{command_and_args.inspect}"
+            outgoing[command] ||= []
+            outgoing[command] << args
+          end
+        end
+        do_stop = outgoing.size < @max_commands
+        unless outgoing.empty?
+          request                          = Net::HTTP::Post.new(@uri.path)
+          request["User-Agent"]            = "Instrumental.Agent.Ruby,#{Instrumental::VERSION}"
+          request["Authorization"]         = @api_key
+          request["Content-Type"]          = "application/json"
+          request["X-Forwarded-For"]       = Socket.gethostname
+          request["X-Forwarded-Proto"]     = @uri.scheme
+          if @gzip
+            compressed_outgoing = StringIO.new
+            begin
+              request["Content-Encoding"]  = "gzip"
+              gz = Zlib::GzipWriter.new(compressed_outgoing)
+              gz.write(outgoing.to_json)
+            ensure
+              gz.close
+            end
+            request.body = compressed_outgoing.string
+          else
+            request.body = outgoing.to_json
+          end
+          with_timeout(REPLY_TIMEOUT) do
+            http.request(request) do |response|
+              logger.debug("Sent #{outgoing.size} metrics, got HTTP code #{response.code}")
+            end
+          end
+          queued_commands = []
+        end
+        syncs.each do |resource|
+          @sync_mutex.synchronize do
+            resource.signal
+          end
+        end
+        if exit_loop
           logger.info "Exiting, #{@queue.size} commands remain"
           return true
-        when 'flush'
-          release_resource = true
-        else
-          logger.debug "Sending: #{command_and_args.chomp}"
-          @socket.puts command_and_args
-        end
-        command_and_args = nil
-        command_options = nil
-        if sync_resource
-          @sync_mutex.synchronize do
-            sync_resource.signal
-          end
+        elsif do_stop
+          Thread.stop
         end
       end
     rescue Exception => err
@@ -354,18 +419,19 @@ module Instrumental
         logger.info "Not trying to reconnect"
         return
       end
-      if command_and_args
-        logger.debug "requeueing: #{command_and_args}"
-        @queue << command_and_args
+      if queued_commands.size > 0
+        logger.debug "requeueing #{queued_commands.size} commands"
+        queued_commands.each do |command_and_args|
+          if @queue.size < MAX_BUFFER
+            @queue << command_and_args
+          end
+        end
       end
-      disconnect
       @failures += 1
       delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
-      logger.error "disconnected, #{@failures} failures in a row, reconnect in #{delay}..."
+      logger.error "error, #{@failures} failures in a row, reconnect in #{delay}..."
       sleep delay
       retry
-    ensure
-      disconnect
     end
 
     def setup_cleanup_at_exit
@@ -376,19 +442,6 @@ module Instrumental
 
     def running?
       !@thread.nil? && @pid == Process.pid
-    end
-
-    def disconnect
-      if connected?
-        logger.info "Disconnecting..."
-        begin
-          with_timeout(EXIT_FLUSH_TIMEOUT) { @socket.flush }
-        rescue Timeout::Error
-          logger.info "Timed out flushing socket..."
-        end
-        @socket.close
-      end
-      @socket = nil
     end
 
   end
