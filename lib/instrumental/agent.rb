@@ -363,11 +363,11 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
         http               = Net::HTTP.new(@uri.host, @uri.port)
         http.use_ssl       = @uri.scheme == "https" if has_ssl
         http.open_timeout  = CONNECT_TIMEOUT
-        http.ssl_timeout   = CONNECT_TIMEOUT
         http.read_timeout  = REPLY_TIMEOUT
         if has_ssl && http.use_ssl?
           http.verify_mode = OpenSSL::SSL::VERIFY_PEER
           http.ca_file     = "some-bundled-ca-file" # TODO
+          http.ssl_timeout = CONNECT_TIMEOUT
         end
         outgoing = {}
         exit_loop = false
