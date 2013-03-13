@@ -49,6 +49,8 @@ class TestServer
             res.status = "401"
             res.body = "GTFO"
           end
+        else
+          res.status = "0"
         end
       end
       @server.start

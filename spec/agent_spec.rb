@@ -8,7 +8,7 @@ describe Instrumental::Agent, "disabled" do
   before do
     Instrumental::Agent.logger.level = Logger::UNKNOWN
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :enabled => false)
+    @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url, :enabled => false)
   end
 
   after do
@@ -31,20 +31,20 @@ describe Instrumental::Agent, "disabled" do
 
   it "should no op on flush without reconnect" do
     1.upto(100) { @agent.gauge('disabled_test', 1) }
-    @agent.flush(false)
+    @agent.flush(:allow_reconnect => false)
     wait
     @server.commands.should be_empty
   end
 
   it "should no op on flush with reconnect" do
     1.upto(100) { @agent.gauge('disabled_test', 1) }
-    @agent.flush(true)
+    @agent.flush(:allow_reconnect => true)
     wait
     @server.commands.should be_empty
   end
 
   it "should no op on an empty flush" do
-    @agent.flush(true)
+    @agent.flush(:allow_reconnect => true)
     wait
     @server.commands.should be_empty
   end
@@ -298,65 +298,59 @@ describe Instrumental::Agent, "enabled" do
   end
 
   it "should no op on an empty flush" do
-    @agent.flush(true)
+    @agent.flush(:allow_reconnect => true)
     wait
     @server.commands.should be_empty
   end
 end
 
 describe Instrumental::Agent, "connection problems" do
-  after do
-    @agent.stop
-    @server.stop
+  before do
+    Instrumental::Agent.logger = Logger.new("/dev/null")
   end
 
-  it "should automatically reconnect on disconnect" do
-    @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    @agent.increment("reconnect_test", 1, 1234)
-    wait
-    @server.disconnect_all
-    wait
-    @agent.increment('reconnect_test', 1, 5678) # triggers reconnect
-    wait
-    @server.connect_count.should == 2
-    @server.commands.last.should == "increment reconnect_test 1 5678 1"
+  after do
+    @agent.stop if @agent
+    @server.stop if @server
   end
 
   it "should buffer commands when server is down" do
     @server = TestServer.new(:listen => false)
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    wait
+    @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url)
     @agent.increment('reconnect_test', 1, 1234)
+    @agent.flush(:async => true)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
+    @agent.queue.pop(true).should include(["increment", "reconnect_test 1 1234 1"])
+    @agent.failures.should >= 1
   end
 
   it "should buffer commands when server is not responsive" do
     @server = TestServer.new(:response => false)
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    wait
+    @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url, :synchronous => false)
     @agent.increment('reconnect_test', 1, 1234)
+    @agent.flush(:async => true)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
+    @agent.queue.pop(true).should include(["increment", "reconnect_test 1 1234 1"])
+    @agent.failures.should >= 1
   end
 
   it "should buffer commands when authentication fails" do
     @server = TestServer.new(:authenticate => false)
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    wait
+    @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url, :synchronous => false)
     @agent.increment('reconnect_test', 1, 1234)
+    @agent.flush(:async => true)
     wait
-    @agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
+    @agent.queue.pop(true).should include(["increment", "reconnect_test 1 1234 1"])
+    @agent.failures.should >= 1
   end
 
   it "should warn once when buffer is full" do
     with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
       @server = TestServer.new(:listen => false)
-      @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-      wait
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
       @agent.logger.should_receive(:warn).with(/Queue full/).once
-
+      @agent.increment('buffer_full_warn_test', 1, 1234)
+      @agent.queue.stub(:pop) { Thread.stop }
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
@@ -367,26 +361,26 @@ describe Instrumental::Agent, "connection problems" do
 
   it "should send commands in a short-lived process" do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
     if pid = fork { @agent.increment('foo', 1, 1234) }
       Process.wait(pid)
-      @server.commands.last.should == "increment foo 1 1234 1"
+      @server.commands.last["increment"].first.should == "foo 1 1234 1"
     end
   end
 
   it "should send commands in a process that bypasses at_exit when using #cleanup" do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
     if pid = fork { @agent.increment('foo', 1, 1234); @agent.cleanup; exit! }
       Process.wait(pid)
-      @server.commands.last.should == "increment foo 1 1234 1"
+      @server.commands.last["increment"].first.should == "foo 1 1234 1"
     end
   end
 
   it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    TCPSocket.stub!(:new) { |*args| sleep(5) && StringIO.new }
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+    Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
     with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
       if (pid = fork { @agent.increment('foo', 1) })
         tm = Time.now.to_f
@@ -400,8 +394,8 @@ describe Instrumental::Agent, "connection problems" do
 
   it "should not wait to exit a process if there are no commands queued" do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
-    TCPSocket.stub!(:new) { |*args| sleep(5) && StringIO.new }
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+    Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
     with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
       if (pid = fork { @agent.increment('foo', 1); @agent.queue.clear })
         tm = Time.now.to_f
@@ -412,12 +406,11 @@ describe Instrumental::Agent, "connection problems" do
     end
   end
 
-  it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
+  it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt joining the thread and waiting for a final flush" do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => false)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false, :reporting_interval => 10)
     @agent.increment('foo', 1)
-    wait
-    @agent.instance_variable_get(:@socket).should_receive(:flush).and_return {
+    @agent.instance_variable_get(:@thread).should_receive(:join).and_return {
       r, w = IO.pipe
       IO.select([r]) # mimic an endless blocking select poll
     }
@@ -425,7 +418,7 @@ describe Instrumental::Agent, "connection problems" do
       tm = Time.now.to_f
       @agent.cleanup
       diff = Time.now.to_f - tm
-      diff.should <= 3
+      diff.should <= 3.1 # .1 for overhead
     end
   end
 end
@@ -433,7 +426,7 @@ end
 describe Instrumental::Agent, "enabled with sync option" do
   before do
     @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.host_and_port, :synchronous => true)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => true)
   end
 
   after do
@@ -447,11 +440,11 @@ describe Instrumental::Agent, "enabled with sync option" do
         @agent.increment('overflow_test', i + 1, 300)
       end
       wait # let the server receive the commands
-      @server.commands.should include("increment overflow_test 1 300 1")
-      @server.commands.should include("increment overflow_test 2 300 1")
-      @server.commands.should include("increment overflow_test 3 300 1")
-      @server.commands.should include("increment overflow_test 4 300 1")
-      @server.commands.should include("increment overflow_test 5 300 1")
+      @server.commands.should include({ "increment" => ["overflow_test 1 300 1"] })
+      @server.commands.should include({ "increment" => ["overflow_test 2 300 1"] })
+      @server.commands.should include({ "increment" => ["overflow_test 3 300 1"] })
+      @server.commands.should include({ "increment" => ["overflow_test 4 300 1"] })
+      @server.commands.should include({ "increment" => ["overflow_test 5 300 1"] })
     end
   end
 

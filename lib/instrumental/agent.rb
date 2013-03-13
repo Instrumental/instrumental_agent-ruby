@@ -20,7 +20,7 @@ module Instrumental
     COLLECTOR_URL         = "http://collector.instrumentalapp.com/report"
 
     attr_accessor :host, :port, :synchronous, :queue
-    attr_reader :connection, :enabled
+    attr_reader :connection, :enabled, :failures
 
     def self.logger=(l)
       @logger = l
@@ -156,14 +156,38 @@ module Instrumental
     # Synchronously flush all pending metrics out to the server
     # By default will not try to reconnect to the server if a
     # connection failure happens during the flush, though you
-    # may optionally override this behavior by passing true.
+    # may optionally override this behavior by passing allow_reconnect: true.
+    #
+    # Options:
+    # :allow_reconnect: Default false, if true will try to reconnect if a
+    #                   failure occurs while flushing.
+    # :async:           Default false, if true, will not block until flush
+    #                   is complete.
     #
     #  agent.flush
-    def flush(allow_reconnect = false)
-      queue_message(nil, {
-        :synchronous => true,
-        :allow_reconnect => allow_reconnect
-      }) if running?
+    def flush(*args)
+      if [true, false].include?(args.first)
+        allow_reconnect = args.first
+        async           = false
+        logger.warn(<<-EOWARN)
+Calling flush on the Instrumental Agent with a single boolean argument is deprecated. Please use:
+
+agent.flush(:allow_reconnect => #{allow_reconnect})
+
+        EOWARN
+      else
+        options         = args.first || {}
+        allow_reconnect = !!options[:allow_reconnect]
+        async           = options[:async]
+      end
+      if async
+        @thread.wakeup if running?
+      else
+        queue_message(nil, {
+          :synchronous => true,
+          :allow_reconnect => allow_reconnect
+        }) if running?
+      end
     end
 
     def enabled?
@@ -331,8 +355,9 @@ module Instrumental
     end
 
     def run_worker_loop
-      @failures = 0
       queued_commands = []
+      command_options = {}
+      syncs = []
       loop do
         has_ssl            = self.class.ssl_available?
         http               = Net::HTTP.new(@uri.host, @uri.port)
@@ -345,7 +370,6 @@ module Instrumental
           http.ca_file     = "some-bundled-ca-file" # TODO
         end
         outgoing = {}
-        syncs = []
         exit_loop = false
         while @queue.size > 0 && outgoing.size < @max_commands
           command_and_args, command_options = @queue.pop
@@ -359,7 +383,7 @@ module Instrumental
               break
             end
           when Array
-            queued_commands << command_and_args
+            queued_commands << [command_and_args, command_options]
             command, args = command_and_args
             logger.debug "Sending: #{command_and_args.inspect}"
             outgoing[command] ||= []
@@ -390,15 +414,14 @@ module Instrumental
           with_timeout(REPLY_TIMEOUT) do
             http.request(request) do |response|
               logger.debug("Sent #{outgoing.size} metrics, got HTTP code #{response.code}")
+              unless (200...300).include?(response.code.to_i)
+                raise Exception.new("Error submitting metrics, got code #{response.code.inspect}")
+              end
             end
           end
           queued_commands = []
         end
-        syncs.each do |resource|
-          @sync_mutex.synchronize do
-            resource.signal
-          end
-        end
+        release_resources(syncs)
         if exit_loop
           logger.info "Exiting, #{@queue.size} commands remain"
           return true
@@ -421,17 +444,29 @@ module Instrumental
       end
       if queued_commands.size > 0
         logger.debug "requeueing #{queued_commands.size} commands"
-        queued_commands.each do |command_and_args|
+        queued_commands.each do |queued|
           if @queue.size < MAX_BUFFER
-            @queue << command_and_args
+            @queue << queued
           end
         end
+        queued_commands = []
       end
       @failures += 1
       delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
       logger.error "error, #{@failures} failures in a row, reconnect in #{delay}..."
       sleep delay
       retry
+    ensure
+      release_resources(syncs)
+    end
+
+    def release_resources(sync_array)
+      sync_array.each do |resource|
+        @sync_mutex.synchronize do
+          resource.signal
+        end
+      end
+      sync_array.clear
     end
 
     def setup_cleanup_at_exit
