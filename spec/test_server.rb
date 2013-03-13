@@ -1,7 +1,13 @@
+require 'logger'
 require 'webrick'
 
 class TestServer
   attr_accessor :host, :port, :connect_count, :commands, :connections
+
+  def self.next_port
+    @port ||= 10001
+    @port += 1
+  end
 
   def initialize(options={})
     default_options = {
@@ -23,43 +29,53 @@ class TestServer
 
 
   def listen
-    @port ||= 10001
+    @port = TestServer.next_port
     @main_thread = Thread.new do
-      @server = WEBrick::HTTPServer.new :Port => @port, :AccessLog => [], :Logger => Logger.new("/dev/null")
-      @server.mount_proc "/report" do |req, res|
-        @connect_count += 1
-        @connections << [req["Authorization"], req["User-Agent"], req["X-Forwarded-For"]]
-        if @options[:response]
-          if @options[:authenticate]
-            @commands << if req["Content-Encoding"] == "gzip"
-              stream = StringIO.new(req.body)
-              begin
-                reader = Zlib::GzipReader.new(stream)
-                content = reader.read
-                JSON.parse(content)
-              ensure
-                reader.close
+      begin
+        @server = WEBrick::HTTPServer.new :Port => @port, :AccessLog => [], :Logger => Logger.new("/dev/null")
+        @server.mount_proc "/report" do |req, res|
+          begin
+            @connect_count += 1
+            @connections << [req["Authorization"], req["User-Agent"], req["X-Forwarded-For"]]
+            if @options[:response]
+              if @options[:authenticate]
+                @commands << if req["Content-Encoding"] == "gzip"
+                  stream = StringIO.new(req.body)
+                  begin
+                    reader = Zlib::GzipReader.new(stream)
+                    content = reader.read
+                    JSON.parse(content)
+                  ensure
+                    reader.close
+                  end
+                else
+                  JSON.parse(req.body)
+                end
+                res.status = "200"
+                res.body = "OK"
+              else
+                res.status = "401"
+                res.body = "GTFO"
               end
             else
-              JSON.parse(req.body)
+              res.status = "0"
             end
-            res.status = "200"
-            res.body = "OK"
-          else
-            res.status = "401"
-            res.body = "GTFO"
+          rescue Exception => e
+            puts e.message
           end
-        else
-          res.status = "0"
         end
+        @server.start
+      rescue Errno::EADDRINUSE => err
+        puts "#{err.inspect} failed to get port #{@port}"
+        puts err.message
+        retry
+      rescue Exception => e
+        puts "%s\n%s" % [e.message, e.backtrace.join("\n")]
+        puts "Tests will fail due to server startup failing"
+        raise
       end
-      @server.start
     end
-  rescue Errno::EADDRINUSE => err
-    puts "#{err.inspect} failed to get port #{@port}"
-    puts err.message
-    @port += 1
-    retry
+    sleep(0.1) while (@server.nil? || @server.listeners.empty?)
   end
 
   def protocol
