@@ -418,7 +418,7 @@ describe Instrumental::Agent, "connection problems" do
       tm = Time.now.to_f
       @agent.cleanup
       diff = Time.now.to_f - tm
-      diff.should <= 3.1 # .1 for overhead
+      diff.should <= 4 # accounting for some overhead here, TODO check validity
     end
   end
 end
