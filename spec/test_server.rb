@@ -1,6 +1,8 @@
 require 'logger'
 require 'webrick'
 
+# TODO: With the switch to Net::HTTP, the need for TestServer
+# could be obviated mostly by Webmock. Investigate.
 class TestServer
   attr_accessor :host, :port, :connect_count, :commands, :connections
 
@@ -91,11 +93,11 @@ class TestServer
     @connect_count = 0
     @connections = []
     @commands = []
-    @server.shutdown if @server
-    @server = nil
     @main_thread.kill if @main_thread
     @main_thread = nil
     sleep(1)
+    @server.shutdown if @server
+    @server = nil
   end
 
 end
