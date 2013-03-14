@@ -309,8 +309,8 @@ describe Instrumental::Agent, "connection problems" do
     @agent.increment('reconnect_test', 1, 1234)
     @agent.flush(:async => true)
     wait
-    @agent.queue.pop(true).should include(["increment", "reconnect_test 1 1234 1"])
     @agent.failures.should >= 1
+    @agent.queue.pop(true).should include(["increment", "reconnect_test 1 1234 1"])
   end
 
   it "should buffer commands when authentication fails" do
@@ -402,7 +402,7 @@ describe Instrumental::Agent, "connection problems" do
           Process.wait(pid)
           diff = Time.now.to_f - tm
           diff.should >= 3
-          diff.should < 5
+          diff.should < 6 # higher due to scheduling nondeterminism
         end
       end
     end
@@ -447,5 +447,39 @@ describe Instrumental::Agent, "enabled with sync option" do
       @server.commands.should include({ "increment" => ["overflow_test 5 300 1"] })
     end
   end
+end
+
+describe Instrumental::Agent, "ssl" do
+  before do
+    fixture_dir = File.expand_path(File.join(File.dirname(__FILE__), "fixtures"))
+    @goodca     = File.join(fixture_dir, "root.cer")
+    @badca      = File.join(fixture_dir, "alternate-root.cer")
+    @cert       = File.join(fixture_dir, "localhost.cer")
+    @certkey    = File.join(fixture_dir, "localhost.key")
+  end
+
+  after do
+    @server.stop
+    @agent.stop
+  end
+
+  it "should connect using ssl if it is available" do
+    @server = TestServer.new(:certificate => @cert, :private_key => @certkey, :secure => true)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :ca => @goodca)
+    @agent.increment('test', 1)
+    @agent.flush
+    wait
+    @server.connect_count.should == 1
+  end
+
+  it "should fail to connect if the provided root certificate and the server root certificate do not match" do
+    @server = TestServer.new(:certificate => @cert, :private_key => @certkey, :secure => true)
+    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :ca => @badca)
+    @agent.increment('test', 1)
+    @agent.flush
+    wait
+    @server.connect_count.should == 0
+  end
+
 
 end

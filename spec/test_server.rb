@@ -1,5 +1,7 @@
 require 'logger'
+require 'openssl'
 require 'webrick'
+require 'webrick/https'
 
 # TODO: With the switch to Net::HTTP, the need for TestServer
 # could be obviated mostly by Webmock. Investigate.
@@ -16,7 +18,9 @@ class TestServer
       :listen => true,
       :authenticate => true,
       :response => true,
-      :secure => false
+      :secure => false,
+      :certificate => nil,
+      :private_key => nil
     }
     @options = default_options.merge(options)
 
@@ -26,6 +30,10 @@ class TestServer
     @host = 'localhost'
     @main_thread = nil
     @server = nil
+    if @options[:certificate] && @options[:private_key]
+      @certificate = OpenSSL::X509::Certificate.new(File.read(@options[:certificate]))
+      @private_key = OpenSSL::PKey::RSA.new(File.read(@options[:private_key]))
+    end
     listen if @options[:listen]
   end
 
@@ -34,7 +42,13 @@ class TestServer
     @port = TestServer.next_port
     @main_thread = Thread.new do
       begin
-        @server = WEBrick::HTTPServer.new :Port => @port, :AccessLog => [], :Logger => Logger.new("/dev/null")
+        options = { :Port => @port, :AccessLog => [], :Logger => Logger.new("/dev/null") }
+        if @certificate && @private_key
+          options[:SSLEnable] = true
+          options[:SSLCertificate] = @certificate
+          options[:SSLPrivateKey] = @private_key
+        end
+        @server = WEBrick::HTTPServer.new options
         @server.mount_proc "/report" do |req, res|
           begin
             @connect_count += 1

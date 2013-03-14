@@ -10,14 +10,17 @@ require 'zlib'
 
 module Instrumental
   class Agent
+    DEFAULT_MAX_COMMANDS  = 1024
+    DEFAULT_INTERVAL      = 10
     BACKOFF               = 2.0
-    MAX_RECONNECT_DELAY   = 15
+    MAX_RETRY_DELAY       = 15
     MAX_BUFFER            = 5000
     REPLY_TIMEOUT         = 10
     CONNECT_TIMEOUT       = 20
     EXIT_FLUSH_TIMEOUT    = 5
     SECURE_COLLECTOR_URL  = "https://collector.instrumentalapp.com/report"
     COLLECTOR_URL         = "http://collector.instrumentalapp.com/report"
+    CA_FILE               = File.expand_path(File.join(File.dirname(__FILE__), "..", "..", "ca", "collector.pem"))
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled, :failures
@@ -59,14 +62,16 @@ module Instrumental
       # gzip:               true
       # enabled:            true
       # synchronous:        false
+      # ca:                 Path to root certificate authority pem file
       @api_key            = api_key
       @uri                = URI(options[:collector] || self.class.default_collector)
       if @uri.scheme == "https" && !self.class.ssl_available?
         raise "SSL is not currently supported on your platform, please reinstall Ruby or specify a non https endpoint like #{COLLECTOR_URL}"
       end
-      @reporting_interval = options[:reporting_interval] || 10
-      @max_commands       = options[:max_commands] || 1024
+      @reporting_interval = options[:reporting_interval] || DEFAULT_INTERVAL
+      @max_commands       = options[:max_commands] || DEFAULT_MAX_COMMANDS
       @gzip               = options[:gzip].nil? ? true : options[:gzip]
+      @ca                 = options[:ca] || CA_FILE
       @enabled            = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous        = !!options[:synchronous]
       @pid                = Process.pid
@@ -371,7 +376,9 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
         http.read_timeout  = REPLY_TIMEOUT
         if has_ssl && http.use_ssl?
           http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-          http.ca_file     = "some-bundled-ca-file" # TODO
+          if @ca && !@ca.empty?
+            http.ca_file   = @ca
+          end
           http.ssl_timeout = CONNECT_TIMEOUT
         end
         outgoing = {}
@@ -457,7 +464,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
         queued_commands = []
       end
       @failures += 1
-      delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
+      delay = [(@failures - 1) ** BACKOFF, MAX_RETRY_DELAY].min
       logger.error "error, #{@failures} failures in a row, reconnect in #{delay}..."
       sleep delay
       retry
