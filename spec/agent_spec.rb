@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 def wait
-  sleep 0.3 # FIXME: hack
+  sleep 0.3 # FIXME: Hack.
 end
 
 describe Instrumental::Agent, "disabled" do
@@ -155,18 +155,16 @@ describe Instrumental::Agent, "enabled" do
 
   it "should discard data that overflows the buffer" do
     with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+      commands = []
+      Queue.stub(:new).and_return(commands)
+      commands.stub(:pop) { Thread.stop }
       5.times do |i|
         @agent.increment('overflow_test', i + 1, 300)
       end
-      wait
-      values = @server.commands.collect do |command|
-        command["increment"]
-      end.flatten
-      values.should     include("overflow_test 1 300 1")
-      values.should     include("overflow_test 2 300 1")
-      values.should     include("overflow_test 3 300 1")
-      values.should_not include("overflow_test 4 300 1")
-      values.should_not include("overflow_test 5 300 1")
+      commands.size.should == 3
+      commands[0].first.should == ["increment", "overflow_test 1 300 1"]
+      commands[1].first.should == ["increment", "overflow_test 2 300 1"]
+      commands[2].first.should == ["increment", "overflow_test 3 300 1"]
     end
   end
 
@@ -189,24 +187,6 @@ describe Instrumental::Agent, "enabled" do
     end
   end
 
-  it "should automatically reconnect when forked" do
-    wait
-    @agent.increment('fork_reconnect_test', 1, 2)
-    pid = fork do
-      @agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
-    end
-    wait
-    @agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
-    wait
-    @server.connect_count.should >= 2
-    values = @server.commands.collect do |command|
-      command["increment"]
-    end.flatten
-    values.should include("fork_reconnect_test 1 2 1")
-    values.should include("fork_reconnect_test 1 3 1")
-    values.should include("fork_reconnect_test 1 4 1")
-  end
-
   it "should never let an exception reach the user" do
     @agent.stub!(:send_command).and_raise(Exception.new("Test Exception"))
     @agent.increment('throws_exception', 2).should be_nil
@@ -220,10 +200,9 @@ describe Instrumental::Agent, "enabled" do
   end
 
   it "should return nil if the user overflows the MAX_BUFFER" do
+    Queue.any_instance.stub(:pop) { Thread.stop }
     1.upto(Instrumental::Agent::MAX_BUFFER) do
       @agent.increment("test").should == 1
-      thread = @agent.instance_variable_get(:@thread)
-      thread.kill
     end
     @agent.increment("test").should be_nil
   end
@@ -290,11 +269,11 @@ describe Instrumental::Agent, "enabled" do
 
   it "should allow flushing pending values to the server" do
     1.upto(100) { @agent.gauge('a', rand(50)) }
-    @agent.instance_variable_get(:@queue).size.should >= 100
+    @agent.instance_variable_get(:@queue).size.should > 0
     @agent.flush
     @agent.instance_variable_get(:@queue).size.should ==  0
     wait
-    @server.commands.last["gauge"].grep(/^a /).size.should == 100
+    @server.commands.collect { |c| c["gauge"].grep(/^a /).size }.inject(0) { |p, c| p + c }.should == 100
   end
 
   it "should no op on an empty flush" do
@@ -346,79 +325,100 @@ describe Instrumental::Agent, "connection problems" do
 
   it "should warn once when buffer is full" do
     with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+      Queue.any_instance.stub(:pop) { Thread.stop }
       @server = TestServer.new(:listen => false)
       @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
       @agent.logger.should_receive(:warn).with(/Queue full/).once
       @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.queue.stub(:pop) { Thread.stop }
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
       @agent.increment('buffer_full_warn_test', 1, 1234)
-    end
-  end
-
-  it "should send commands in a short-lived process" do
-    @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
-    if pid = fork { @agent.increment('foo', 1, 1234) }
-      Process.wait(pid)
-      @server.commands.last["increment"].first.should == "foo 1 1234 1"
-    end
-  end
-
-  it "should send commands in a process that bypasses at_exit when using #cleanup" do
-    @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
-    if pid = fork { @agent.increment('foo', 1, 1234); @agent.cleanup; exit! }
-      Process.wait(pid)
-      @server.commands.last["increment"].first.should == "foo 1 1234 1"
-    end
-  end
-
-  it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
-    @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
-    Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
-    with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
-      if (pid = fork { @agent.increment('foo', 1) })
-        tm = Time.now.to_f
-        Process.wait(pid)
-        diff = Time.now.to_f - tm
-        diff.should >= 3
-        diff.should < 5
-      end
-    end
-  end
-
-  it "should not wait to exit a process if there are no commands queued" do
-    @server = TestServer.new
-    @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
-    Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
-    with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
-      if (pid = fork { @agent.increment('foo', 1); @agent.queue.clear })
-        tm = Time.now.to_f
-        Process.wait(pid)
-        diff = Time.now.to_f - tm
-        diff.should < 1
-      end
     end
   end
 
   it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt joining the thread and waiting for a final flush" do
+    Queue.any_instance.stub(:pop) { Thread.stop }
     @server = TestServer.new
     @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false, :reporting_interval => 10)
     @agent.increment('foo', 1)
-    @agent.instance_variable_get(:@thread).should_receive(:join).and_return {
-      r, w = IO.pipe
-      IO.select([r]) # mimic an endless blocking select poll
-    }
+    @agent.should_receive(:flush) { Thread.stop }
     with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
       tm = Time.now.to_f
       @agent.cleanup
       diff = Time.now.to_f - tm
       diff.should <= 4 # accounting for some overhead here, TODO check validity
+    end
+  end
+
+  if RUBY_PLATFORM != "java"
+    # The following tests use fork, skip when JRuby
+    it "should automatically reconnect when forked" do
+      @server = TestServer.new
+      @agent = Instrumental::Agent.new('test_token', :reporting_interval => 0.1, :collector => @server.url, :synchronous => false)
+      wait
+      @agent.increment('fork_reconnect_test', 1, 2)
+      pid = fork do
+        @agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
+      end
+      wait
+      @agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
+      wait
+      @server.connect_count.should >= 2
+      values = @server.commands.collect do |command|
+        command["increment"]
+      end.flatten
+      values.should include("fork_reconnect_test 1 2 1")
+      values.should include("fork_reconnect_test 1 3 1")
+      values.should include("fork_reconnect_test 1 4 1")
+    end
+
+    it "should send commands in a short-lived process" do
+      @server = TestServer.new
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+      if pid = fork { @agent.increment('foo', 1, 1234) }
+        Process.wait(pid)
+        @server.commands.last["increment"].first.should == "foo 1 1234 1"
+      end
+    end
+
+    it "should send commands in a process that bypasses at_exit when using #cleanup" do
+      @server = TestServer.new
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+      if pid = fork { @agent.increment('foo', 1, 1234); @agent.cleanup; exit! }
+        Process.wait(pid)
+        @server.commands.last["increment"].first.should == "foo 1 1234 1"
+      end
+    end
+
+    it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
+      @server = TestServer.new
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+      Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
+      with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
+        if (pid = fork { @agent.increment('foo', 1) })
+          tm = Time.now.to_f
+          Process.wait(pid)
+          diff = Time.now.to_f - tm
+          diff.should >= 3
+          diff.should < 5
+        end
+      end
+    end
+
+    it "should not wait to exit a process if there are no commands queued" do
+      @server = TestServer.new
+      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
+      Net::HTTP.any_instance.stub(:request) { |*args| sleep(5) && nil }
+      with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
+        if (pid = fork { @agent.increment('foo', 1); @agent.queue.clear })
+          tm = Time.now.to_f
+          Process.wait(pid)
+          diff = Time.now.to_f - tm
+          diff.should < 1
+        end
+      end
     end
   end
 end
