@@ -232,13 +232,18 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
     # where at_exit is bypassed like Resque workers.
     def cleanup
       if running?
-        logger.info "Cleaning up agent, queue size: #{@queue.size}, thread running: #{@thread.alive?}"
+        size = @queue.size
+        logger.info "Cleaning up agent, queue size: #{size}, thread running: #{@thread.alive?}"
         @allow_reconnect = false
-        if @queue.size > 0
-          queue_message(nil, { :exit => true })
-          @thread.wakeup
+        if size > 0
           begin
-            with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
+            if @thread
+              with_timeout(EXIT_FLUSH_TIMEOUT) do
+                queue_message(nil, { :exit => true })
+                flush(:async => true)
+                @thread.join
+              end
+            end
           rescue Timeout::Error
             if @queue.size > 0
               logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
