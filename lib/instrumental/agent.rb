@@ -310,6 +310,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
             logger.warn "Queue full(#{@queue.size}), dropping commands..."
           end
           logger.debug "Dropping command, queue full(#{@queue.size}): #{cmd.inspect}"
+          flush(:async => true)
           nil
         end
       end
