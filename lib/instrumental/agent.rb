@@ -10,11 +10,10 @@ require 'zlib'
 
 module Instrumental
   class Agent
-    DEFAULT_MAX_COMMANDS  = 1024
     DEFAULT_INTERVAL      = 10
+    DEFAULT_MAX_BUFFER    = 10_000
     BACKOFF               = 2.0
     MAX_RETRY_DELAY       = 15
-    MAX_BUFFER            = 5000
     REPLY_TIMEOUT         = 10
     CONNECT_TIMEOUT       = 20
     EXIT_FLUSH_TIMEOUT    = 5
@@ -58,7 +57,7 @@ module Instrumental
       # defaults
       # collector:          https://collector.instrumentalapp.com/report
       # reporting_interval: 10
-      # max_commands:       1024
+      # max_buffer:         5000
       # gzip:               true
       # enabled:            true
       # synchronous:        false
@@ -69,7 +68,7 @@ module Instrumental
         raise "SSL is not currently supported on your platform, please reinstall Ruby or specify a non https endpoint like #{COLLECTOR_URL}"
       end
       @reporting_interval = options[:reporting_interval] || DEFAULT_INTERVAL
-      @max_commands       = options[:max_commands] || DEFAULT_MAX_COMMANDS
+      @max_buffer         = options[:max_buffer] || DEFAULT_MAX_BUFFER
       @gzip               = options[:gzip].nil? ? true : options[:gzip]
       @ca                 = options[:ca] || CA_FILE
       @enabled            = options.has_key?(:enabled) ? !!options[:enabled] : true
@@ -300,7 +299,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
         start_connection_worker if !running?
 
         cmd = [cmd, args.collect { |a| a.to_s }.join(" ")]
-        if @queue.size < MAX_BUFFER
+        if @queue.size < @max_buffer
           @queue_full_warning = false
           logger.debug "Queueing: #{cmd.inspect}"
           queue_message(cmd, { :synchronous => @synchronous })
@@ -384,7 +383,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
         end
         outgoing = {}
         exit_loop = false
-        while @queue.size > 0 && outgoing.size < @max_commands
+        while @queue.size > 0 && outgoing.size < @max_buffer
           command_and_args, command_options = @queue.pop
           if (sync_resource = command_options && command_options[:sync_resource])
             syncs << sync_resource
@@ -403,7 +402,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
             outgoing[command] << args
           end
         end
-        do_stop = outgoing.size < @max_commands
+        do_stop = outgoing.size < @max_buffer
         unless outgoing.empty?
           request                          = Net::HTTP::Post.new(@uri.path)
           request["User-Agent"]            = "Instrumental.Agent.Ruby,#{Instrumental::VERSION}"
@@ -458,7 +457,7 @@ agent.flush(:allow_reconnect => #{allow_reconnect})
       if queued_commands.size > 0
         logger.debug "requeueing #{queued_commands.size} commands"
         queued_commands.each do |queued|
-          if @queue.size < MAX_BUFFER
+          if @queue.size < @max_buffer
             @queue << queued
           end
         end

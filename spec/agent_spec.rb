@@ -154,37 +154,43 @@ describe Instrumental::Agent, "enabled" do
   end
 
   it "should discard data that overflows the buffer" do
-    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-      commands = []
-      Queue.stub(:new).and_return(commands)
-      commands.stub(:pop) { Thread.stop }
-      5.times do |i|
-        @agent.increment('overflow_test', i + 1, 300)
-      end
-      commands.size.should == 3
-      commands[0].first.should == ["increment", "overflow_test 1 300 1"]
-      commands[1].first.should == ["increment", "overflow_test 2 300 1"]
-      commands[2].first.should == ["increment", "overflow_test 3 300 1"]
+    @agent = Instrumental::Agent.new('test_token',
+                                        :reporting_interval => 0.1,
+                                        :collector => @server.url,
+                                        :synchronous => false,
+                                        :max_buffer => 3)
+    commands = []
+    Queue.stub(:new).and_return(commands)
+    commands.stub(:pop) { Thread.stop }
+    5.times do |i|
+      @agent.increment('overflow_test', i + 1, 300)
     end
+    commands.size.should == 3
+    commands[0].first.should == ["increment", "overflow_test 1 300 1"]
+    commands[1].first.should == ["increment", "overflow_test 2 300 1"]
+    commands[2].first.should == ["increment", "overflow_test 3 300 1"]
   end
 
   it "should send all data in synchronous mode" do
-    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-      @agent.synchronous = true
-      5.times do |i|
-        @agent.increment('overflow_test', i + 1, 300)
-      end
-      @agent.instance_variable_get(:@queue).size.should == 0
-      wait # let the server receive the commands
-      values = @server.commands.collect do |command|
-        command["increment"]
-      end.flatten
-      values.should include("overflow_test 1 300 1")
-      values.should include("overflow_test 2 300 1")
-      values.should include("overflow_test 3 300 1")
-      values.should include("overflow_test 4 300 1")
-      values.should include("overflow_test 5 300 1")
+    @agent = Instrumental::Agent.new('test_token',
+                                        :reporting_interval => 0.1,
+                                        :collector => @server.url,
+                                        :synchronous => true,
+                                        :max_buffer => 3)
+
+    5.times do |i|
+      @agent.increment('overflow_test', i + 1, 300)
     end
+    @agent.instance_variable_get(:@queue).size.should == 0
+    wait # let the server receive the commands
+    values = @server.commands.collect do |command|
+      command["increment"]
+    end.flatten
+    values.should include("overflow_test 1 300 1")
+    values.should include("overflow_test 2 300 1")
+    values.should include("overflow_test 3 300 1")
+    values.should include("overflow_test 4 300 1")
+    values.should include("overflow_test 5 300 1")
   end
 
   it "should never let an exception reach the user" do
@@ -199,9 +205,14 @@ describe Instrumental::Agent, "enabled" do
     expect { @agent.time('za') { raise "fail" } }.to raise_error
   end
 
-  it "should return nil if the user overflows the MAX_BUFFER" do
+  it "should return nil if the user overflows the max buffer size" do
     Queue.any_instance.stub(:pop) { Thread.stop }
-    1.upto(Instrumental::Agent::MAX_BUFFER) do
+    @agent = Instrumental::Agent.new('test_token',
+                                        :reporting_interval => 0.1,
+                                        :collector => @server.url,
+                                        :synchronous => false,
+                                        :max_buffer => 5)
+    1.upto(5) do
       @agent.increment("test").should == 1
     end
     @agent.increment("test").should be_nil
@@ -324,18 +335,19 @@ describe Instrumental::Agent, "connection problems" do
   end
 
   it "should warn once when buffer is full" do
-    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-      Queue.any_instance.stub(:pop) { Thread.stop }
-      @server = TestServer.new(:listen => false)
-      @agent = Instrumental::Agent.new('test_token', :collector => @server.url, :synchronous => false)
-      @agent.logger.should_receive(:warn).with(/Queue full/).once
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-      @agent.increment('buffer_full_warn_test', 1, 1234)
-    end
+    Queue.any_instance.stub(:pop) { Thread.stop }
+    @server = TestServer.new(:listen => false)
+    @agent = Instrumental::Agent.new('test_token',
+                                      :collector => @server.url,
+                                      :synchronous => false,
+                                      :max_buffer => 3)
+    @agent.logger.should_receive(:warn).with(/Queue full/).once
+    @agent.increment('buffer_full_warn_test', 1, 1234)
+    @agent.increment('buffer_full_warn_test', 1, 1234)
+    @agent.increment('buffer_full_warn_test', 1, 1234)
+    @agent.increment('buffer_full_warn_test', 1, 1234)
+    @agent.increment('buffer_full_warn_test', 1, 1234)
+    @agent.increment('buffer_full_warn_test', 1, 1234)
   end
 
   it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt joining the thread and waiting for a final flush" do
@@ -435,17 +447,19 @@ describe Instrumental::Agent, "enabled with sync option" do
   end
 
   it "should send all data in synchronous mode" do
-    with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-      5.times do |i|
-        @agent.increment('overflow_test', i + 1, 300)
-      end
-      wait # let the server receive the commands
-      @server.commands.should include({ "increment" => ["overflow_test 1 300 1"] })
-      @server.commands.should include({ "increment" => ["overflow_test 2 300 1"] })
-      @server.commands.should include({ "increment" => ["overflow_test 3 300 1"] })
-      @server.commands.should include({ "increment" => ["overflow_test 4 300 1"] })
-      @server.commands.should include({ "increment" => ["overflow_test 5 300 1"] })
+    @agent = Instrumental::Agent.new('test_token',
+                                      :collector => @server.url,
+                                      :synchronous => true,
+                                      :max_buffer => 3)
+    5.times do |i|
+      @agent.increment('overflow_test', i + 1, 300)
     end
+    wait # let the server receive the commands
+    @server.commands.should include({ "increment" => ["overflow_test 1 300 1"] })
+    @server.commands.should include({ "increment" => ["overflow_test 2 300 1"] })
+    @server.commands.should include({ "increment" => ["overflow_test 3 300 1"] })
+    @server.commands.should include({ "increment" => ["overflow_test 4 300 1"] })
+    @server.commands.should include({ "increment" => ["overflow_test 5 300 1"] })
   end
 end
 
