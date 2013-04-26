@@ -40,13 +40,13 @@ module Instrumental
       )
 
       # defaults
-      # host:        instrumentalapp.com
+      # host:        collector.instrumentalapp.com
       # port:        8000
       # enabled:     true
       # synchronous: false
       @api_key         = api_key
       @host, @port     = options[:collector].to_s.split(':')
-      @host          ||= 'instrumentalapp.com'
+      @host          ||= 'collector.instrumentalapp.com'
       @port            = (@port || 8000).to_i
       @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous     = !!options[:synchronous]
