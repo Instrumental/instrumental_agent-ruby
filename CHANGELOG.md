@@ -1,3 +1,6 @@
+### 0.12.3 [April 26th, 2013]
+* Default collector is now collector.instrumentalapp.com
+
 ### 0.12.2 [February 28th, 2013]
 * Allow customization of Capistrano deploy message
 
