@@ -241,7 +241,7 @@ module Instrumental
     def ipv4_address_for_host(host, port)
       addresses = Socket.getaddrinfo(host, port, 'AF_INET')
       if (result = addresses.first)
-        _, _, address, _ = result
+        _, _, _, address, _ = result
         address
       else
         raise Exception.new("Couldn't get address information for host #{host}")
@@ -328,7 +328,7 @@ module Instrumental
       command_and_args = nil
       command_options = nil
       logger.info "connecting to collector"
-      @socket = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM)
+      @socket = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM, 0)
       with_timeout(CONNECT_TIMEOUT) do
         @socket.connect Socket.pack_sockaddr_in(port, ipv4_address_for_host(host, port))
       end
