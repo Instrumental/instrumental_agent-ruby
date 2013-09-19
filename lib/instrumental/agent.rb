@@ -238,6 +238,16 @@ module Instrumental
       logger.error "Exception occurred: #{e.message}\n#{e.backtrace.join("\n")}"
     end
 
+    def ipv4_address_for_host(host, port)
+      addresses = Socket.getaddrinfo(host, port, 'AF_INET')
+      if (result = addresses.first)
+        _, _, address, _ = result
+        address
+      else
+        raise Exception.new("Couldn't get address information for host #{host}")
+      end
+    end
+
     def send_command(cmd, *args)
       cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
       if enabled?
@@ -312,11 +322,16 @@ module Instrumental
       end
     end
 
+
+
     def run_worker_loop
       command_and_args = nil
       command_options = nil
       logger.info "connecting to collector"
-      @socket = with_timeout(CONNECT_TIMEOUT) { TCPSocket.new(host, port) }
+      @socket = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM)
+      with_timeout(CONNECT_TIMEOUT) do
+        @socket.connect Socket.pack_sockaddr_in(port, ipv4_address_for_host(host, port))
+      end
       logger.info "connected to collector at #{host}:#{port}"
       send_with_reply_timeout "hello version #{Instrumental::VERSION} hostname #{Socket.gethostname} pid #{Process.pid}"
       send_with_reply_timeout "authenticate #{@api_key}"
