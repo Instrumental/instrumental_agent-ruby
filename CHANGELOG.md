@@ -1,3 +1,6 @@
+### 0.12.4 [September 19th, 2013]
+* Instrumental doesn't officially support IPV6, prefer IPV4
+
 ### 0.12.3 [April 26th, 2013]
 * Default collector is now collector.instrumentalapp.com
 
