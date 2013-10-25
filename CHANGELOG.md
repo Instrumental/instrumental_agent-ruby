@@ -1,3 +1,6 @@
+### 0.12.5 [September 19th, 2013]
+* Set license in gemspec
+
 ### 0.12.4 [September 19th, 2013]
 * Instrumental doesn't officially support IPV6, prefer IPV4
 
