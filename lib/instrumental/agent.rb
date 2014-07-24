@@ -13,6 +13,7 @@ module Instrumental
     REPLY_TIMEOUT = 10
     CONNECT_TIMEOUT = 20
     EXIT_FLUSH_TIMEOUT = 5
+    HOSTNAME = Socket.gethostbyname(Socket.gethostname).first rescue "unknown"
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
@@ -333,7 +334,15 @@ module Instrumental
         @socket.connect Socket.pack_sockaddr_in(port, ipv4_address_for_host(host, port))
       end
       logger.info "connected to collector at #{host}:#{port}"
-      send_with_reply_timeout "hello version #{Instrumental::VERSION} hostname #{Socket.gethostname} pid #{Process.pid}"
+      hello_options = {
+        "version" => "ruby/instrumental_agent/#{VERSION}",
+        "hostname" => HOSTNAME,
+        "pid" => Process.pid,
+        "ruby" => "#{RUBY_ENGINE}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
+        "platform" => RUBY_PLATFORM
+      }.to_a.flatten.map { |v| v.to_s.gsub(/\s+/, "_") }.join(" ")
+
+      send_with_reply_timeout "hello #{hello_options}"
       send_with_reply_timeout "authenticate #{@api_key}"
       @failures = 0
       loop do
