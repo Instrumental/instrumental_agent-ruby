@@ -13,7 +13,7 @@ module Instrumental
     REPLY_TIMEOUT = 10
     CONNECT_TIMEOUT = 20
     EXIT_FLUSH_TIMEOUT = 5
-    HOSTNAME = Socket.gethostbyname(Socket.gethostname).first rescue "unknown"
+    HOSTNAME = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
