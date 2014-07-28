@@ -19,7 +19,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency(%q<rake>, [">= 0"])
   s.add_development_dependency(%q<rspec>, ["~> 2.0"])
   s.add_development_dependency(%q<fuubar>, [">= 0"])
-  if RUBY_VERSION >= "1.8.7"
+  if RUBY_VERSION >= "1.9.2"
     s.add_development_dependency(%q<guard>, [">= 0"])
     s.add_development_dependency(%q<guard-rspec>, [">= 0"])
     s.add_development_dependency(%q<growl>, [">= 0"])
