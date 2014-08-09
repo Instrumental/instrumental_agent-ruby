@@ -86,7 +86,7 @@ describe Instrumental::Agent, "enabled" do
     @server.commands[0].should =~ / version /
     @server.commands[0].should =~ / hostname /
     @server.commands[0].should =~ / pid /
-    @server.commands[0].should =~ / ruby /
+    @server.commands[0].should =~ / runtime /
     @server.commands[0].should =~ / platform /
   end
 

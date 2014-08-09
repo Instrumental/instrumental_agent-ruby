@@ -338,7 +338,7 @@ module Instrumental
         "version" => "ruby/instrumental_agent/#{VERSION}",
         "hostname" => HOSTNAME,
         "pid" => Process.pid,
-        "ruby" => "#{RUBY_ENGINE}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
+        "runtime" => "#{RUBY_ENGINE}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
         "platform" => RUBY_PLATFORM
       }.to_a.flatten.map { |v| v.to_s.gsub(/\s+/, "_") }.join(" ")
 
