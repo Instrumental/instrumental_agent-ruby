@@ -1,3 +1,7 @@
+### 0.12.6 [August 11th, 2014]
+* Send more agent information in hello command
+* Don't require celluloid on Ruby versions that it will never support
+
 ### 0.12.5 [September 19th, 2013]
 * Set license in gemspec
 
