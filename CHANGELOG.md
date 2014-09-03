@@ -1,3 +1,6 @@
+### 0.12.7 [August 11th, 2014]
+* Fix MRI 1.8.7 incompatibility due to RUBY_ENGINE constant
+
 ### 0.12.6 [August 11th, 2014]
 * Send more agent information in hello command
 * Don't require celluloid on Ruby versions that it will never support
