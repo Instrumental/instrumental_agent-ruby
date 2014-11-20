@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.version     = Instrumental::VERSION
   s.authors     = ["Elijah Miller", "Christopher Zelenak", "Kristopher Chambers", "Matthew Hassfurder"]
   s.email       = ["support@instrumentalapp.com"]
-  s.homepage    = "http://github.com/fastestforward/instrumental_agent"
+  s.homepage    = "http://github.com/expectedbehavior/instrumental_agent"
   s.summary     = %q{Agent for reporting data to instrumentalapp.com}
   s.description = %q{Track anything.}
   s.license     = "MIT"
