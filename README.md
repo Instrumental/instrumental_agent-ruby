@@ -104,4 +104,4 @@ Users of Ruby Enterprise Edition should plan on using version 0.9.5 of the Instr
 
 ## Troubleshooting & Help
 
-We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com), or visit the [Instrumental Support](https://fastestforward.campfirenow.com/6b934) Campfire room.
+We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com).
