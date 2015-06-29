@@ -7,13 +7,14 @@ require 'socket'
 
 module Instrumental
   class Agent
-    BACKOFF = 2.0
+    BACKOFF             = 2.0
+    CONNECT_TIMEOUT     = 20
+    EXIT_FLUSH_TIMEOUT  = 5
+    HOSTNAME            = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
+    MAX_BUFFER          = 5000
     MAX_RECONNECT_DELAY = 15
-    MAX_BUFFER = 5000
-    REPLY_TIMEOUT = 10
-    CONNECT_TIMEOUT = 20
-    EXIT_FLUSH_TIMEOUT = 5
-    HOSTNAME = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
+    REPLY_TIMEOUT       = 10
+
 
     attr_accessor :host, :port, :synchronous, :queue
     attr_reader :connection, :enabled
