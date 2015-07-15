@@ -320,7 +320,22 @@ module Instrumental
 
     def test_connection
       begin
-        @socket.read_nonblock(1)
+        # In the case where the socket is an OpenSSL::SSL::SSLSocket,
+        # on Ruby 1.8.6, 1.8.7 or 1.9.1, read_nonblock does not exist,
+        # and so the case of testing socket liveliness via a nonblocking
+        # read that catches a wait condition won't work.
+        #
+        # Instead we perform a timed out read on the socket on some threshold
+        # (1ms), and swallow the timeout as we assume any socket errors like
+        # EOF or connection hangup would have happened at that point.
+        if @socket.respond_to?(:read_nonblock)
+          @socket.read_nonblock(1)
+        else
+          begin
+            Timeout.timeout(0.001) { @socket.read(1) }
+          rescue Timeout::Error
+          end
+        end
       rescue *wait_exceptions
         # noop
       end
