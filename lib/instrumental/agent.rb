@@ -356,7 +356,9 @@ module Instrumental
         @socket = TCPSocket.open(host, port)
         if @secure
           context = OpenSSL::SSL::SSLContext.new()
-          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
+          if @verify_cert
+            context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
+          end
           ssl_socket = OpenSSL::SSL::SSLSocket.new(@socket, context)
           @socket = ssl_socket
           @socket.connect
