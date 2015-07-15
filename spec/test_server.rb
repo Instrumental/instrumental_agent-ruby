@@ -42,10 +42,12 @@ class TestServer
         # puts "listening"
         loop do
           client = @server.accept
+          if @options[:secure]
+            client.sync_close = true
+          end
           @connections << client
           @connect_count += 1
           @fd_to_thread[fd_for_socket(client)] = Thread.new(client) do |socket|
-            # puts "connection received"
             loop do
               begin
                 command = socket.gets.to_s.chomp.strip
@@ -120,7 +122,13 @@ class TestServer
         thr.kill
       end
       @fd_to_thread.delete(fd_for_socket(c))
-      c.close rescue false
+      begin
+        c.close
+        if c.respond_to?(:io)
+          c.io.close
+        end
+      rescue Exception
+      end
     }
     @connections = []
   end
