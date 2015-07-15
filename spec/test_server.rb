@@ -1,3 +1,5 @@
+require 'openssl'
+
 class TestServer
   attr_accessor :host, :port, :connect_count, :commands
 
@@ -6,9 +8,13 @@ class TestServer
       :listen => true,
       :authenticate => true,
       :response => true,
+      :secure => false
     }
     @options = default_options.merge(options)
 
+    dir = File.expand_path(File.dirname(__FILE__))
+    @certificate = OpenSSL::X509::Certificate.new(File.open(File.join(dir, "test.crt")))
+    @key = OpenSSL::PKey::RSA.new(File.open(File.join(dir, "test.key")))
     @connect_count = 0
     @connections = []
     @commands = []
@@ -23,6 +29,12 @@ class TestServer
   def listen
     @port ||= 10001
     @server = TCPServer.new(@port)
+    if @options[:secure]
+      context = OpenSSL::SSL::SSLContext.new
+      context.cert = @certificate
+      context.key = @key
+      @server = OpenSSL::SSL::SSLServer.new(@server, context)
+    end
     @main_thread = Thread.new do
       begin
         # puts "listening"
@@ -30,7 +42,7 @@ class TestServer
           client = @server.accept
           @connections << client
           @connect_count += 1
-          @fd_to_thread[client.to_i] = Thread.new(client) do |socket|
+          @fd_to_thread[fd_for_socket(client)] = Thread.new(client) do |socket|
             # puts "connection received"
             loop do
               begin
@@ -56,7 +68,7 @@ class TestServer
               end
             end
           end
-          @client_threads << @fd_to_thread[client.to_i]
+          @client_threads << @fd_to_thread[fd_for_socket(client)]
         end
       rescue Exception => err
         unless @stopping
@@ -90,13 +102,22 @@ class TestServer
     end
   end
 
+  def fd_for_socket(socket)
+    case socket
+    when OpenSSL::SSL::SSLSocket
+      socket.io.to_i
+    else
+      socket.to_i
+    end
+  end
+
   def disconnect_all
-    @connections.each { |c| 
-      if (thr = @fd_to_thread[c.to_i])
+    @connections.each { |c|
+      if (thr = @fd_to_thread[fd_for_socket(c)])
         thr.kill
       end
-      @fd_to_thread.delete(c.to_i)
-      c.close rescue false 
+      @fd_to_thread.delete(fd_for_socket(c))
+      c.close rescue false
     }
     @connections = []
   end

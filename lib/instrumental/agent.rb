@@ -65,14 +65,7 @@ module Instrumental
       @synchronous     = !!options[:synchronous]
       @pid             = Process.pid
       @allow_reconnect = true
-      if @secure
-        @certs         = %w{equifax geotrust rapidssl}.map do |name|
-                           OpenSSL::X509::Certificate.new(File.open(File.join("certs", "#{name}.ca.pem")))
-                         end
-      else
-        @certs         = []
-      end
-
+      @certs           = certificates
       setup_cleanup_at_exit if @enabled
     end
 
@@ -346,23 +339,26 @@ module Instrumental
       end
     end
 
-
+    def open_socket(remote_host, remote_port, secure, verify_cert)
+      sock = TCPSocket.open(remote_host, remote_port)
+      if secure
+        context = OpenSSL::SSL::SSLContext.new()
+        if verify_cert
+          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
+        end
+        ssl_socket = OpenSSL::SSL::SSLSocket.new(sock, context)
+        ssl_socket.connect
+        sock = ssl_socket
+      end
+      sock
+    end
 
     def run_worker_loop
       command_and_args = nil
       command_options = nil
       logger.info "connecting to collector"
       with_timeout(CONNECT_TIMEOUT) do
-        @socket = TCPSocket.open(host, port)
-        if @secure
-          context = OpenSSL::SSL::SSLContext.new()
-          if @verify_cert
-            context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
-          end
-          ssl_socket = OpenSSL::SSL::SSLSocket.new(@socket, context)
-          @socket = ssl_socket
-          @socket.connect
-        end
+        @socket = open_socket(host, port, @secure, @verify_cert)
       end
       logger.info "connected to collector at #{host}:#{port}"
       hello_options = {
@@ -435,11 +431,21 @@ module Instrumental
       !@thread.nil? && @pid == Process.pid
     end
 
+    def flush_socket(socket)
+      if @secure
+        socket.io.flush
+      else
+        socket.flush
+      end
+    end
+
     def disconnect
       if connected?
         logger.info "Disconnecting..."
         begin
-          with_timeout(EXIT_FLUSH_TIMEOUT) { @socket.flush }
+          with_timeout(EXIT_FLUSH_TIMEOUT) do
+            flush_socket(@socket)
+          end
         rescue Timeout::Error
           logger.info "Timed out flushing socket..."
         end
@@ -450,6 +456,16 @@ module Instrumental
 
     def allows_secure?
       defined?(OpenSSL)
+    end
+
+    def certificates
+      if allows_secure?
+        %w{equifax geotrust rapidssl}.map do |name|
+          OpenSSL::X509::Certificate.new(File.open(File.join("certs", "#{name}.ca.pem")))
+        end
+      else
+        []
+      end
     end
 
   end
