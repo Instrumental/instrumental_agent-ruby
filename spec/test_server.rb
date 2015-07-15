@@ -18,6 +18,7 @@ class TestServer
     @connect_count = 0
     @connections = []
     @commands = []
+    @mutex = Mutex.new
     @host = 'localhost'
     @main_thread = nil
     @client_threads = []
@@ -33,6 +34,7 @@ class TestServer
       context = OpenSSL::SSL::SSLContext.new
       context.cert = @certificate
       context.key = @key
+      context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_NONE)
       @server = OpenSSL::SSL::SSLServer.new(@server, context)
     end
     @main_thread = Thread.new do
@@ -46,14 +48,13 @@ class TestServer
             # puts "connection received"
             loop do
               begin
-                command = ""
-                while (c = socket.read(1)) != "\n"
-                  command << c unless c.nil?
-                end
+                command = socket.gets.to_s.chomp.strip
                 if !command.empty?
-                  # puts "got: #{command}"
-                  commands << command
-                  if %w[hello authenticate].include?(command.split(' ')[0])
+                  @mutex.synchronize do
+                    commands << command
+                  end
+                  cmd, _ = command.split
+                  if %w[hello authenticate].include?(cmd)
                     if @options[:response]
                       if @options[:authenticate]
                         socket.puts "ok"
@@ -63,6 +64,8 @@ class TestServer
                     end
                   end
                 end
+              rescue EOFError
+                retry
               rescue Exception => e
                 break
               end
