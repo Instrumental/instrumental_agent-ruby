@@ -1,6 +1,7 @@
 require 'instrumental/version'
 require 'instrumental/system_timer'
 require 'logger'
+require 'openssl' rescue nil
 require 'thread'
 require 'socket'
 
@@ -43,17 +44,34 @@ module Instrumental
 
       # defaults
       # host:        collector.instrumentalapp.com
-      # port:        8000
+      # port:        8001
       # enabled:     true
       # synchronous: false
+      # secure:      true
+      # verify:      true
       @api_key         = api_key
       @host, @port     = options[:collector].to_s.split(':')
       @host          ||= 'collector.instrumentalapp.com'
-      @port            = (@port || 8000).to_i
+      desired_secure   = options[:secure].nil? ? allows_secure? : !!options[:secure]
+      if !allows_secure? && desired_secure
+        @logger.warn "Cannot connect to Instrumental via encrypted transport, SSL not available"
+        desired_secure = false
+      end
+      @secure          = desired_secure
+      @verify_cert     = options[:verify_cert].nil? ? true : !!options[:verify_cert]
+      default_port     = @secure ? 8001 : 8000
+      @port            = (@port || default_port).to_i
       @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous     = !!options[:synchronous]
       @pid             = Process.pid
       @allow_reconnect = true
+      if @secure
+        @certs         = %w{equifax geotrust rapidssl}.map do |name|
+                           OpenSSL::X509::Certificate.new(File.open(File.join("certs", "#{name}.ca.pem")))
+                         end
+      else
+        @certs         = []
+      end
 
       setup_cleanup_at_exit if @enabled
     end
@@ -295,8 +313,12 @@ module Instrumental
     def test_connection
       begin
         @socket.read_nonblock(1)
-      rescue Errno::EAGAIN
+      rescue Errno::EAGAIN, IO::EAGAINWaitReadable, IO::EWOULDBLOCKWaitReadable
         # noop
+      rescue Exception => e
+        unless e.message.index("read would block") # :-|
+          raise
+        end
       end
     end
 
@@ -330,9 +352,15 @@ module Instrumental
       command_and_args = nil
       command_options = nil
       logger.info "connecting to collector"
-      @socket = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM, 0)
       with_timeout(CONNECT_TIMEOUT) do
-        @socket.connect Socket.pack_sockaddr_in(port, ipv4_address_for_host(host, port))
+        @socket = TCPSocket.open(host, port)
+        if @secure
+          context = OpenSSL::SSL::SSLContext.new()
+          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
+          ssl_socket = OpenSSL::SSL::SSLSocket.new(@socket, context)
+          @socket = ssl_socket
+          @socket.connect
+        end
       end
       logger.info "connected to collector at #{host}:#{port}"
       hello_options = {
@@ -416,6 +444,10 @@ module Instrumental
         @socket.close
       end
       @socket = nil
+    end
+
+    def allows_secure?
+      defined?(OpenSSL)
     end
 
   end
