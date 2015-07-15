@@ -355,7 +355,9 @@ module Instrumental
       if secure
         context = OpenSSL::SSL::SSLContext.new()
         if verify_cert
-          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER)
+          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER | OpenSSL::SSL::VERIFY_FAIL_IF_NO_PEER_CERT)
+        else
+          context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_NONE)
         end
         ssl_socket = OpenSSL::SSL::SSLSocket.new(sock, context)
         ssl_socket.connect
