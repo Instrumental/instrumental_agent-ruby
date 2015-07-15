@@ -325,16 +325,13 @@ module Instrumental
         # and so the case of testing socket liveliness via a nonblocking
         # read that catches a wait condition won't work.
         #
-        # Instead we perform a timed out read on the socket on some threshold
-        # (1ms), and swallow the timeout as we assume any socket errors like
-        # EOF or connection hangup would have happened at that point.
+        # We grab the SSL socket's underlying IO object and perform the
+        # non blocking read there in order to ensure the socket is still
+        # valid
         if @socket.respond_to?(:read_nonblock)
           @socket.read_nonblock(1)
-        else
-          begin
-            Timeout.timeout(0.001) { @socket.read(1) }
-          rescue Timeout::Error
-          end
+        elsif @socket.respond_to?(:io)
+          @socket.io.read_nonblock(1)
         end
       rescue *wait_exceptions
         # noop
@@ -375,6 +372,7 @@ module Instrumental
           context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_NONE)
         end
         ssl_socket = OpenSSL::SSL::SSLSocket.new(sock, context)
+        ssl_socket.sync_close = true
         ssl_socket.connect
         sock = ssl_socket
       end
