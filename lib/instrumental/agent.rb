@@ -303,15 +303,26 @@ module Instrumental
       message
     end
 
+    def wait_exceptions
+      classes = [Errno::EAGAIN]
+      if defined?(IO::EAGAINWaitReadable)
+        classes << IO::EAGAINWaitReadable
+      end
+      if defined?(IO::EWOULDBLOCKWaitReadable)
+        classes << IO::EWOULDBLOCKWaitReadable
+      end
+      if defined?(IO::WaitReadable)
+        classes << IO::WaitReadable
+      end
+      classes
+    end
+
+
     def test_connection
       begin
         @socket.read_nonblock(1)
-      rescue Errno::EAGAIN, IO::EAGAINWaitReadable, IO::EWOULDBLOCKWaitReadable
+      rescue *wait_exceptions
         # noop
-      rescue Exception => e
-        unless e.message.index("read would block") # :-|
-          raise
-        end
       end
     end
 
