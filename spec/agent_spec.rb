@@ -226,7 +226,7 @@ shared_examples "Instrumental Agent" do
       end
 
       it "should never let an exception reach the user" do
-        agent.stub!(:send_command).and_raise(Exception.new("Test Exception"))
+        agent.stub(:send_command).and_raise(Exception.new("Test Exception"))
         agent.increment('throws_exception', 2).should be_nil
         wait
         agent.gauge('throws_exception', 234).should be_nil
@@ -394,7 +394,7 @@ shared_examples "Instrumental Agent" do
         end
 
         it "should not wait longer than EXIT_FLUSH_TIMEOUT seconds to exit a process" do
-          agent.stub!(:open_socket) { |*args, &block| sleep(5) && block.call }
+          agent.stub(:open_socket) { |*args, &block| sleep(5) && block.call }
           with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
             if (pid = fork { agent.increment('foo', 1) })
               tm = Time.now.to_f
@@ -407,7 +407,7 @@ shared_examples "Instrumental Agent" do
         end
 
         it "should not wait to exit a process if there are no commands queued" do
-          agent.stub!(:open_socket) { |*args, &block| sleep(5) && block.call }
+          agent.stub(:open_socket) { |*args, &block| sleep(5) && block.call }
           with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
             if (pid = fork { agent.increment('foo', 1); agent.queue.clear })
               tm = Time.now.to_f
@@ -422,7 +422,7 @@ shared_examples "Instrumental Agent" do
       it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
         agent.increment('foo', 1)
         wait
-        agent.should_receive(:flush_socket).and_return do
+        agent.should_receive(:flush_socket) do
           r, w = IO.pipe
           Thread.new do
             IO.select([r]) # mimic an endless blocking select poll
