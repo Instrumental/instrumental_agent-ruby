@@ -1,7 +1,7 @@
 require 'spec_helper'
 
-def wait
-  sleep 0.2 # FIXME: hack
+def wait(n=0.2)
+  sleep n # FIXME: hack
 end
 
 shared_examples "Instrumental Agent" do
@@ -205,9 +205,9 @@ shared_examples "Instrumental Agent" do
         fork do
           agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
         end
-        wait
+        wait(1)
         agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
-        wait
+        wait(1)
         server.connect_count.should == 2
         server.commands.should include("increment fork_reconnect_test 1 2 1")
         server.commands.should include("increment fork_reconnect_test 1 3 1")
@@ -316,9 +316,9 @@ shared_examples "Instrumental Agent" do
         agent.increment("reconnect_test", 1, 1234)
         wait
         server.disconnect_all
-        wait
+        wait(1)
         agent.increment('reconnect_test', 1, 5678) # triggers reconnect
-        wait
+        wait(1)
         server.connect_count.should == 2
         server.commands.last.should == "increment reconnect_test 1 5678 1"
       end
