@@ -422,10 +422,12 @@ shared_examples "Instrumental Agent" do
       it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
         agent.increment('foo', 1)
         wait
-        agent.should_receive(:flush_socket).and_return {
+        agent.should_receive(:flush_socket).and_return do
           r, w = IO.pipe
-          IO.select([r]) # mimic an endless blocking select poll
-        }
+          Thread.new do
+            IO.select([r]) # mimic an endless blocking select poll
+          end.join
+        end
         with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
           tm = Time.now.to_f
           agent.cleanup
