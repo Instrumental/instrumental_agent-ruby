@@ -308,7 +308,7 @@ shared_examples "Instrumental Agent" do
 
       it "should allow flushing pending values to the server" do
         1.upto(100) { agent.gauge('a', rand(50)) }
-        agent.instance_variable_get(:@queue).size.should >= 100
+        agent.instance_variable_get(:@queue).size.should > 0
         agent.flush
         agent.instance_variable_get(:@queue).size.should ==  0
         wait
