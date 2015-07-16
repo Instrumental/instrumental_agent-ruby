@@ -4,6 +4,15 @@ def wait(n=0.2)
   sleep n # FIXME: hack
 end
 
+FORK_SUPPORTED = begin
+                   Process.wait(fork { true })
+                   true
+                 rescue Exception => e
+                   false
+                 end
+
+
+
 shared_examples "Instrumental Agent" do
   context do
 
@@ -200,18 +209,20 @@ shared_examples "Instrumental Agent" do
         end
       end
 
-      it "should automatically reconnect when forked" do
-        agent.increment('fork_reconnect_test', 1, 2)
-        fork do
-          agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
+      if FORK_SUPPORTED
+        it "should automatically reconnect when forked" do
+          agent.increment('fork_reconnect_test', 1, 2)
+          fork do
+            agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
+          end
+          wait(1)
+          agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
+          wait(1)
+          server.connect_count.should == 2
+          server.commands.should include("increment fork_reconnect_test 1 2 1")
+          server.commands.should include("increment fork_reconnect_test 1 3 1")
+          server.commands.should include("increment fork_reconnect_test 1 4 1")
         end
-        wait(1)
-        agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
-        wait(1)
-        server.connect_count.should == 2
-        server.commands.should include("increment fork_reconnect_test 1 2 1")
-        server.commands.should include("increment fork_reconnect_test 1 3 1")
-        server.commands.should include("increment fork_reconnect_test 1 4 1")
       end
 
       it "should never let an exception reach the user" do
@@ -367,14 +378,7 @@ shared_examples "Instrumental Agent" do
         end
       end
 
-      fork_supported = begin
-                         Process.wait(fork { true })
-                         true
-                       rescue Exception => e
-                         false
-                       end
-
-      if fork_supported
+      if FORK_SUPPORTED
         it "should send commands in a short-lived process" do
           if pid = fork { agent.increment('foo', 1, 1234) }
             Process.wait(pid)
