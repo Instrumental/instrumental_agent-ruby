@@ -462,11 +462,7 @@ module Instrumental
     end
 
     def flush_socket(socket)
-      if @secure
-        socket.io.flush
-      else
-        socket.flush
-      end
+      socket.flush
     end
 
     def disconnect
