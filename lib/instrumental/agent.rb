@@ -331,7 +331,11 @@ module Instrumental
         if @socket.respond_to?(:read_nonblock)
           @socket.read_nonblock(1)
         elsif @socket.respond_to?(:io)
-          @socket.io.read_nonblock(1)
+          # The SSL Socket may send down additional data at close time,
+          # so we perform two nonblocking reads, one to pull any pending
+          # data on the socket, and the second to actually perform the connection
+          # liveliness test
+          @socket.io.read_nonblock(1024) && @socket.io.read_nonblock(1024)
         end
       rescue *wait_exceptions
         # noop
