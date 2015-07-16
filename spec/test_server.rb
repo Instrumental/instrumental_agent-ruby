@@ -118,16 +118,20 @@ class TestServer
 
   def disconnect_all
     @connections.each { |c|
-      if (thr = @fd_to_thread[fd_for_socket(c)])
+      fd = fd_for_socket(c)
+      if (thr = @fd_to_thread[fd])
         thr.kill
       end
-      @fd_to_thread.delete(fd_for_socket(c))
+      @fd_to_thread.delete(fd)
       begin
-        c.close
-        if c.respond_to?(:io)
-          c.io.close
+        if c.respond_to?(:sync_close=)
+          c.sync_close = true
         end
-      rescue Exception
+        c.flush
+        c.close
+      rescue Exception => e
+        puts e.message
+        puts e.backtrace.join("\n")
       end
     }
     @connections = []
