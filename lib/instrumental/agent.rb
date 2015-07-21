@@ -18,7 +18,7 @@ module Instrumental
 
 
     attr_accessor :host, :port, :synchronous, :queue
-    attr_reader :connection, :enabled
+    attr_reader :connection, :enabled, :secure
 
     def self.logger=(l)
       @logger = l
@@ -52,9 +52,14 @@ module Instrumental
       @api_key         = api_key
       @host, @port     = options[:collector].to_s.split(':')
       @host          ||= 'collector.instrumentalapp.com'
+      requested_secure = options[:secure] == true
       desired_secure   = options[:secure].nil? ? allows_secure? : !!options[:secure]
       if !allows_secure? && desired_secure
-        @logger.warn "Cannot connect to Instrumental via encrypted transport, SSL not available"
+        logger.warn "Cannot connect to Instrumental via encrypted transport, SSL not available"
+        if requested_secure
+          options[:enabled] = false
+          logger.error "You requested secure protocol to connect to Instrumental, but it is not available on this system (OpenSSL is not defined). Connecting to Instrumental has been disabled."
+        end
         desired_secure = false
       end
       @secure          = desired_secure

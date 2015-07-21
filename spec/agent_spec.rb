@@ -468,4 +468,18 @@ describe "Secure without cert verify" do
   let(:secure?) { true }
   let(:verify_cert?) { false }
   it_behaves_like "Instrumental Agent"
+
+  it "should be disabled if the system does not allow secure connections but the user specifically requested secure" do
+    Instrumental::Agent.any_instance.stub(:allows_secure?) { false }
+    agent = Instrumental::Agent.new('test-token', :enabled => true, :secure => true)
+    agent.secure.should  == false
+    agent.enabled.should == false
+  end
+
+it "should be fallback to insecure if the system does not allow secure connections but the user did not specifically request secure" do
+    Instrumental::Agent.any_instance.stub(:allows_secure?) { false }
+    agent = Instrumental::Agent.new('test-token', :enabled => true)
+    agent.secure.should  == false
+    agent.enabled.should == true
+  end
 end
