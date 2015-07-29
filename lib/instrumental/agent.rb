@@ -491,8 +491,9 @@ module Instrumental
 
     def certificates
       if allows_secure?
+        base_dir = File.expand_path(File.join(File.dirname(__FILE__), "..", ".."))
         %w{equifax geotrust rapidssl}.map do |name|
-          OpenSSL::X509::Certificate.new(File.open(File.join("certs", "#{name}.ca.pem")))
+          OpenSSL::X509::Certificate.new(File.open(File.join(base_dir, "certs", "#{name}.ca.pem")))
         end
       else
         []
