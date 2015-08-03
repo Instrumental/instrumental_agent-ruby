@@ -1,3 +1,6 @@
+### 0.13.0 [August 3, 2015]
+* Add support for encrypted transport, tests for same
+
 ### 0.12.7 [August 11th, 2014]
 * Fix MRI 1.8.7 incompatibility due to RUBY_ENGINE constant
 
