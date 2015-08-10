@@ -71,6 +71,7 @@ module Instrumental
       @pid             = Process.pid
       @allow_reconnect = true
       @certs           = certificates
+
       setup_cleanup_at_exit if @enabled
     end
 
@@ -354,6 +355,7 @@ module Instrumental
         @queue = Queue.new
         @sync_mutex = Mutex.new
         @failures = 0
+        @sockaddr_in = Socket.pack_sockaddr_in(@port, ipv4_address_for_host(@host, @port))
         logger.info "Starting thread"
         @thread = Thread.new do
           run_worker_loop
@@ -371,8 +373,9 @@ module Instrumental
       end
     end
 
-    def open_socket(remote_host, remote_port, secure, verify_cert)
-      sock = TCPSocket.open(remote_host, remote_port)
+    def open_socket(sockaddr_in, secure, verify_cert)
+      sock = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM, 0)
+      sock.connect sockaddr_in
       if secure
         context = OpenSSL::SSL::SSLContext.new()
         if verify_cert
@@ -393,7 +396,7 @@ module Instrumental
       command_options = nil
       logger.info "connecting to collector"
       with_timeout(CONNECT_TIMEOUT) do
-        @socket = open_socket(host, port, @secure, @verify_cert)
+        @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
       end
       logger.info "connected to collector at #{host}:#{port}"
       hello_options = {
