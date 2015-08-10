@@ -375,9 +375,9 @@ module Instrumental
 
     def open_socket(sockaddr_in, secure, verify_cert)
       sock = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM, 0)
-      sock.connect sockaddr_in
+      sock.connect(sockaddr_in)
       if secure
-        context = OpenSSL::SSL::SSLContext.new()
+        context = OpenSSL::SSL::SSLContext.new
         if verify_cert
           context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER | OpenSSL::SSL::VERIFY_FAIL_IF_NO_PEER_CERT)
         else
