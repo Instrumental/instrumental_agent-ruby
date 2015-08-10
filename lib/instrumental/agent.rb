@@ -194,7 +194,7 @@ module Instrumental
     def stop
       disconnect
       if @thread
-        @thread.kill.join
+        @thread.kill
         @thread = nil
       end
     end
