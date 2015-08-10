@@ -387,6 +387,25 @@ shared_examples "Instrumental Agent" do
           agent.should_not be_running
           agent.queue.size.should == 1
         end
+
+        it "should cancel the worker thread when the host has hung up" do
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          server.stop
+          wait
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          agent.should_not be_running
+          agent.queue.size.should == 1
+          wait
+          server.listen
+          wait
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          agent.should be_running
+          agent.queue.size.should == 0
+        end
+
       end
 
 
