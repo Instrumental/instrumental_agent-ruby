@@ -263,8 +263,12 @@ module Instrumental
         _, _, _, address, _ = result
         address
       else
-        raise Exception.new("Couldn't get address information for host #{host}")
+        logger.warn "Couldn't resolve address for #{host}:#{port}"
       end
+    rescue Exception => e
+      logger.warn "Couldn't resolve address for #{host}:#{port}"
+      report_exception(e)
+      nil
     end
 
     def send_command(cmd, *args)
@@ -351,14 +355,17 @@ module Instrumental
     def start_connection_worker
       if enabled?
         disconnect
-        @pid = Process.pid
-        @queue = Queue.new
-        @sync_mutex = Mutex.new
-        @failures = 0
-        @sockaddr_in = Socket.pack_sockaddr_in(@port, ipv4_address_for_host(@host, @port))
-        logger.info "Starting thread"
-        @thread = Thread.new do
-          run_worker_loop
+        address = ipv4_address_for_host(@host, @port)
+        if address
+          @pid = Process.pid
+          @queue = Queue.new
+          @sync_mutex = Mutex.new
+          @failures = 0
+          @sockaddr_in = Socket.pack_sockaddr_in(@port, address)
+          logger.info "Starting thread"
+          @thread = Thread.new do
+            run_worker_loop
+          end
         end
       end
     end
@@ -412,37 +419,43 @@ module Instrumental
       @failures = 0
       loop do
         command_and_args, command_options = @queue.pop
-        sync_resource = command_options && command_options[:sync_resource]
-        test_connection
-        case command_and_args
-        when 'exit'
-          logger.info "Exiting, #{@queue.size} commands remain"
-          return true
-        when 'flush'
-          release_resource = true
-        else
-          logger.debug "Sending: #{command_and_args.chomp}"
-          @socket.puts command_and_args
-        end
-        command_and_args = nil
-        command_options = nil
-        if sync_resource
-          @sync_mutex.synchronize do
-            sync_resource.signal
+        if command_and_args
+          sync_resource = command_options && command_options[:sync_resource]
+          test_connection
+          case command_and_args
+          when 'exit'
+            logger.info "Exiting, #{@queue.size} commands remain"
+            return true
+          when 'flush'
+            release_resource = true
+          else
+            logger.debug "Sending: #{command_and_args.chomp}"
+            @socket.puts command_and_args
+          end
+          command_and_args = nil
+          command_options = nil
+          if sync_resource
+            @sync_mutex.synchronize do
+              sync_resource.signal
+            end
           end
         end
       end
     rescue Exception => err
-      if err.is_a?(EOFError)
+      allow_reconnect = @allow_reconnect
+      case err
+      when EOFError
         # nop
-      elsif err.is_a?(Errno::ECONNREFUSED)
-        logger.error "unable to connect to Instrumental."
+      when Errno::ECONNREFUSED, Errno::EHOSTUNREACH
+        logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
+        allow_reconnect = false
       else
         report_exception(err)
       end
-      if @allow_reconnect == false ||
+      if allow_reconnect == false ||
         (command_options && command_options[:allow_reconnect] == false)
         logger.info "Not trying to reconnect"
+        @failures = 0
         return
       end
       if command_and_args
@@ -466,7 +479,7 @@ module Instrumental
     end
 
     def running?
-      !@thread.nil? && @pid == Process.pid
+      !@thread.nil? && @pid == Process.pid && @thread.alive?
     end
 
     def flush_socket(socket)

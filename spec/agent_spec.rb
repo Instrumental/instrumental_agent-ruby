@@ -23,7 +23,8 @@ shared_examples "Instrumental Agent" do
     let(:enabled)      { true }
     let(:synchronous)  { false }
     let(:token)        { 'test_token' }
-    let(:agent)        { Instrumental::Agent.new(token, :collector => server.host_and_port, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
+    let(:address)      { server.host_and_port }
+    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
 
     # Server options
     let(:listen)       { true }
@@ -238,10 +239,9 @@ shared_examples "Instrumental Agent" do
       end
 
       it "should return nil if the user overflows the MAX_BUFFER" do
+        Queue.any_instance.stub(:pop) { nil }
         1.upto(Instrumental::Agent::MAX_BUFFER) do
           agent.increment("test").should == 1
-          thread = agent.instance_variable_get(:@thread)
-          thread.kill
         end
         agent.increment("test").should be_nil
       end
@@ -357,6 +357,15 @@ shared_examples "Instrumental Agent" do
         end
       end
 
+      context 'bad address' do
+        let(:address) { "nope:9999" }
+
+        it "should not be running if it cannot connect" do
+          agent.gauge('connection_test', 1, 1234)
+          agent.should_not be_running
+        end
+      end
+
       context 'not responding' do
         let(:response) { false }
 
@@ -364,6 +373,19 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
+        end
+      end
+
+      context 'server hangup' do
+        it "should cancel the worker thread when the host has hung up" do
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          server.stop
+          wait
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          agent.should_not be_running
+          agent.queue.size.should == 1
         end
       end
 
@@ -453,7 +475,6 @@ shared_examples "Instrumental Agent" do
           server.commands.should include("increment overflow_test 5 300 1")
         end
       end
-
     end
   end
 end
