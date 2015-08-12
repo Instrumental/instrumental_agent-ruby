@@ -2,6 +2,7 @@ require 'instrumental/version'
 require 'instrumental/system_timer'
 require 'logger'
 require 'openssl' rescue nil
+require 'resolv'
 require 'thread'
 require 'socket'
 
@@ -15,6 +16,7 @@ module Instrumental
     MAX_BUFFER          = 5000
     MAX_RECONNECT_DELAY = 15
     REPLY_TIMEOUT       = 10
+    RESOLVE_TIMEOUT     = 1
 
 
     attr_accessor :host, :port, :synchronous, :queue
@@ -258,12 +260,8 @@ module Instrumental
     end
 
     def ipv4_address_for_host(host, port)
-      addresses = Socket.getaddrinfo(host, port, 'AF_INET')
-      if (result = addresses.first)
-        _, _, _, address, _ = result
-        address
-      else
-        logger.warn "Couldn't resolve address for #{host}:#{port}"
+      with_timeout(RESOLVE_TIMEOUT) do
+        Resolv.getaddresses(host).select { |address| address =~ Resolv::IPv4::Regex }.first
       end
     rescue Exception => e
       logger.warn "Couldn't resolve address for #{host}:#{port}"
@@ -275,8 +273,7 @@ module Instrumental
       cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
       if enabled?
         start_connection_worker if !running?
-
-        if @queue.size < MAX_BUFFER
+        if @queue && @queue.size < MAX_BUFFER
           @queue_full_warning = false
           logger.debug "Queueing: #{cmd.chomp}"
           queue_message(cmd, { :synchronous => @synchronous })
