@@ -2,22 +2,26 @@ require 'instrumental/version'
 require 'instrumental/system_timer'
 require 'logger'
 require 'openssl' rescue nil
+require 'resolv'
 require 'thread'
 require 'socket'
 
 
 module Instrumental
   class Agent
-    BACKOFF             = 2.0
-    CONNECT_TIMEOUT     = 20
-    EXIT_FLUSH_TIMEOUT  = 5
-    HOSTNAME            = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
-    MAX_BUFFER          = 5000
-    MAX_RECONNECT_DELAY = 15
-    REPLY_TIMEOUT       = 10
+    BACKOFF                            = 2.0
+    CONNECT_TIMEOUT                    = 20
+    EXIT_FLUSH_TIMEOUT                 = 5
+    HOSTNAME                           = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
+    MAX_BUFFER                         = 5000
+    MAX_RECONNECT_DELAY                = 15
+    REPLY_TIMEOUT                      = 10
+    RESOLUTION_FAILURES_BEFORE_WAITING = 3
+    RESOLUTION_WAIT                    = 30
+    RESOLVE_TIMEOUT                    = 1
 
 
-    attr_accessor :host, :port, :synchronous, :queue
+    attr_accessor :host, :port, :synchronous, :queue, :dns_resolutions, :last_connect_at
     attr_reader :connection, :enabled, :secure
 
     def self.logger=(l)
@@ -71,6 +75,9 @@ module Instrumental
       @pid             = Process.pid
       @allow_reconnect = true
       @certs           = certificates
+      @dns_resolutions = 0
+      @last_connect_at = 0
+
       setup_cleanup_at_exit if @enabled
     end
 
@@ -196,6 +203,9 @@ module Instrumental
         @thread.kill
         @thread = nil
       end
+      if @queue
+        @queue.clear
+      end
     end
 
     # Called when a process is exiting to give it some extra time to
@@ -256,22 +266,29 @@ module Instrumental
       logger.error "Exception occurred: #{e.message}\n#{e.backtrace.join("\n")}"
     end
 
-    def ipv4_address_for_host(host, port)
-      addresses = Socket.getaddrinfo(host, port, 'AF_INET')
-      if (result = addresses.first)
-        _, _, _, address, _ = result
-        address
-      else
-        raise Exception.new("Couldn't get address information for host #{host}")
+    def ipv4_address_for_host(host, port, moment_to_connect = Time.now.to_i)
+      self.dns_resolutions  = dns_resolutions + 1
+      time_since_last_connect = moment_to_connect - last_connect_at
+      if dns_resolutions < RESOLUTION_FAILURES_BEFORE_WAITING || time_since_last_connect >= RESOLUTION_WAIT
+        self.last_connect_at = moment_to_connect
+        with_timeout(RESOLVE_TIMEOUT) do
+          address  = Resolv.getaddresses(host).select { |address| address =~ Resolv::IPv4::Regex }.first
+          self.dns_resolutions = 0
+          address
+        end
       end
+    rescue Exception => e
+      logger.warn "Couldn't resolve address for #{host}:#{port}"
+      report_exception(e)
+      nil
     end
 
     def send_command(cmd, *args)
       cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
       if enabled?
-        start_connection_worker if !running?
 
-        if @queue.size < MAX_BUFFER
+        start_connection_worker if !running?
+        if @queue && @queue.size < MAX_BUFFER
           @queue_full_warning = false
           logger.debug "Queueing: #{cmd.chomp}"
           queue_message(cmd, { :synchronous => @synchronous })
@@ -350,13 +367,17 @@ module Instrumental
     def start_connection_worker
       if enabled?
         disconnect
-        @pid = Process.pid
-        @queue = Queue.new
-        @sync_mutex = Mutex.new
-        @failures = 0
-        logger.info "Starting thread"
-        @thread = Thread.new do
-          run_worker_loop
+        @queue ||= Queue.new
+        address = ipv4_address_for_host(@host, @port)
+        if address
+          @pid = Process.pid
+          @sync_mutex = Mutex.new
+          @failures = 0
+          @sockaddr_in = Socket.pack_sockaddr_in(@port, address)
+          logger.info "Starting thread"
+          @thread = Thread.new do
+            run_worker_loop
+          end
         end
       end
     end
@@ -371,10 +392,11 @@ module Instrumental
       end
     end
 
-    def open_socket(remote_host, remote_port, secure, verify_cert)
-      sock = TCPSocket.open(remote_host, remote_port)
+    def open_socket(sockaddr_in, secure, verify_cert)
+      sock = Socket.new(Socket::PF_INET, Socket::SOCK_STREAM, 0)
+      sock.connect(sockaddr_in)
       if secure
-        context = OpenSSL::SSL::SSLContext.new()
+        context = OpenSSL::SSL::SSLContext.new
         if verify_cert
           context.set_params(:verify_mode => OpenSSL::SSL::VERIFY_PEER | OpenSSL::SSL::VERIFY_FAIL_IF_NO_PEER_CERT)
         else
@@ -393,7 +415,7 @@ module Instrumental
       command_options = nil
       logger.info "connecting to collector"
       with_timeout(CONNECT_TIMEOUT) do
-        @socket = open_socket(host, port, @secure, @verify_cert)
+        @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
       end
       logger.info "connected to collector at #{host}:#{port}"
       hello_options = {
@@ -409,37 +431,46 @@ module Instrumental
       @failures = 0
       loop do
         command_and_args, command_options = @queue.pop
-        sync_resource = command_options && command_options[:sync_resource]
-        test_connection
-        case command_and_args
-        when 'exit'
-          logger.info "Exiting, #{@queue.size} commands remain"
-          return true
-        when 'flush'
-          release_resource = true
-        else
-          logger.debug "Sending: #{command_and_args.chomp}"
-          @socket.puts command_and_args
-        end
-        command_and_args = nil
-        command_options = nil
-        if sync_resource
-          @sync_mutex.synchronize do
-            sync_resource.signal
+        if command_and_args
+          sync_resource = command_options && command_options[:sync_resource]
+          test_connection
+          case command_and_args
+          when 'exit'
+            logger.info "Exiting, #{@queue.size} commands remain"
+            return true
+          when 'flush'
+            release_resource = true
+          else
+            logger.debug "Sending: #{command_and_args.chomp}"
+            @socket.puts command_and_args
+          end
+          command_and_args = nil
+          command_options = nil
+          if sync_resource
+            @sync_mutex.synchronize do
+              sync_resource.signal
+            end
           end
         end
       end
     rescue Exception => err
-      if err.is_a?(EOFError)
+      allow_reconnect = @allow_reconnect
+      case err
+      when EOFError
         # nop
-      elsif err.is_a?(Errno::ECONNREFUSED)
-        logger.error "unable to connect to Instrumental."
+      when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE
+        # If the connection has been refused by Instrumental
+        # or we cannot reach the server
+        # or the connection state of this socket is in a race
+        logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
+        allow_reconnect = false
       else
         report_exception(err)
       end
-      if @allow_reconnect == false ||
+      if allow_reconnect == false ||
         (command_options && command_options[:allow_reconnect] == false)
         logger.info "Not trying to reconnect"
+        @failures = 0
         return
       end
       if command_and_args
@@ -463,7 +494,7 @@ module Instrumental
     end
 
     def running?
-      !@thread.nil? && @pid == Process.pid
+      !@thread.nil? && @pid == Process.pid && @thread.alive?
     end
 
     def flush_socket(socket)

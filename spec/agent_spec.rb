@@ -23,7 +23,8 @@ shared_examples "Instrumental Agent" do
     let(:enabled)      { true }
     let(:synchronous)  { false }
     let(:token)        { 'test_token' }
-    let(:agent)        { Instrumental::Agent.new(token, :collector => server.host_and_port, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
+    let(:address)      { server.host_and_port }
+    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
 
     # Server options
     let(:listen)       { true }
@@ -157,7 +158,6 @@ shared_examples "Instrumental Agent" do
         now = Time.now
         agent.increment("increment_test").should == 1
         agent.increment("increment_test", 5).should == 5
-        wait
       end
 
       it "should report an increment a value" do
@@ -188,6 +188,7 @@ shared_examples "Instrumental Agent" do
           server.commands.should     include("increment overflow_test 1 300 1")
           server.commands.should     include("increment overflow_test 2 300 1")
           server.commands.should     include("increment overflow_test 3 300 1")
+
           server.commands.should_not include("increment overflow_test 4 300 1")
           server.commands.should_not include("increment overflow_test 5 300 1")
         end
@@ -238,10 +239,9 @@ shared_examples "Instrumental Agent" do
       end
 
       it "should return nil if the user overflows the MAX_BUFFER" do
+        Queue.any_instance.stub(:pop) { nil }
         1.upto(Instrumental::Agent::MAX_BUFFER) do
           agent.increment("test").should == 1
-          thread = agent.instance_variable_get(:@thread)
-          thread.kill
         end
         agent.increment("test").should be_nil
       end
@@ -331,15 +331,18 @@ shared_examples "Instrumental Agent" do
         agent.increment('reconnect_test', 1, 5678) # triggers reconnect
         wait(1)
         server.connect_count.should == 2
+        # Ensure the last command sent has been received after the reconnect attempt
         server.commands.last.should == "increment reconnect_test 1 5678 1"
       end
 
       context 'not listening' do
+        # Mark server as down
         let(:listen) { false }
 
         it "should buffer commands when server is down" do
           agent.increment('reconnect_test', 1, 1234)
           wait
+          # The agent should not have sent the metric yet, the server is not responding
           agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
         end
 
@@ -357,23 +360,84 @@ shared_examples "Instrumental Agent" do
         end
       end
 
+      context 'bad address' do
+        let(:address) { "nope:9999" }
+
+        it "should not be running if it cannot connect" do
+          agent.gauge('connection_test', 1, 1234)
+          # nope:9999 does not resolve to anything, the agent will not resolve
+          # the address and refuse to start a worker thread
+          agent.should_not be_running
+        end
+      end
+
       context 'not responding' do
+        # Server will not acknowledge hello or authenticate commands
         let(:response) { false }
 
         it "should buffer commands when server is not responsive" do
           agent.increment('reconnect_test', 1, 1234)
           wait
+          # Since server hasn't responded to hello or authenticate, worker thread will not send data
           agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
         end
       end
 
+      context 'server hangup' do
+        it "should cancel the worker thread when the host has hung up" do
+          # Start the background agent thread and let it send one metric successfully
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          # Stop the server
+          server.stop
+          wait
+          # Send one metric to the stopped server
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          # The agent thread should have stopped running since the network write would
+          # have failed. The queue will still contain the metric that has yet to be sent
+          agent.should_not be_running
+          agent.queue.size.should == 1
+
+        end
+
+        it "should restart the worker thread after hanging it up during an unreachable host event" do
+          # Start the background agent thread and let it send one metric successfully
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          # Stop the server
+          server.stop
+          wait
+          # Send one metric to the stopped server
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          # The agent thread should have stopped running since the network write would
+          # have failed. The queue will still contain the metric that has yet to be sent
+          agent.should_not be_running
+          agent.queue.size.should == 1
+          wait
+          # Start the server back up again
+          server.listen
+          wait
+          # Sending another metric should kickstart the background worker thread
+          agent.gauge('connection_failure', 1, 1234)
+          wait
+          # The agent should now be running the background thread, and the queue should be empty
+          agent.should be_running
+          agent.queue.size.should == 0
+        end
+
+      end
+
 
       context 'not authenticating' do
+        # Server will fail all authentication attempts
         let(:authenticate) { false }
 
         it "should buffer commands when authentication fails" do
           agent.increment('reconnect_test', 1, 1234)
           wait
+          # Metrics should not have been sent since all authentication failed
           agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
         end
       end
@@ -382,6 +446,7 @@ shared_examples "Instrumental Agent" do
         it "should send commands in a short-lived process" do
           if pid = fork { agent.increment('foo', 1, 1234) }
             Process.wait(pid)
+            # The forked process should have flushed and waited on at_exit
             server.commands.last.should == "increment foo 1 1234 1"
           end
         end
@@ -389,6 +454,7 @@ shared_examples "Instrumental Agent" do
         it "should send commands in a process that bypasses at_exit when using #cleanup" do
           if pid = fork { agent.increment('foo', 1, 1234); agent.cleanup; exit! }
             Process.wait(pid)
+            # The forked process should have flushed and waited on at_exit since cleanup was called explicitly
             server.commands.last.should == "increment foo 1 1234 1"
           end
         end
@@ -435,6 +501,39 @@ shared_examples "Instrumental Agent" do
           diff.should <= 3
         end
       end
+
+      it "should not attempt to resolve DNS more than RESOLUTION_FAILURES_BEFORE_WAITING before introducing an inactive period" do
+        with_constants('Instrumental::Agent::RESOLUTION_FAILURES_BEFORE_WAITING' => 1,
+                       'Instrumental::Agent::RESOLUTION_WAIT' => 2,
+                       'Instrumental::Agent::RESOLVE_TIMEOUT' => 0.1) do
+          attempted_resolutions = 0
+          Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+        end
+      end
+
+      it "should attempt to resolve DNS after the RESOLUTION_WAIT inactive period has been exceeded" do
+        with_constants('Instrumental::Agent::RESOLUTION_FAILURES_BEFORE_WAITING' => 1,
+                       'Instrumental::Agent::RESOLUTION_WAIT' => 2,
+                       'Instrumental::Agent::RESOLVE_TIMEOUT' => 0.1) do
+          attempted_resolutions = 0
+          Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          sleep 2
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 2
+        end
+      end
     end
 
     describe Instrumental::Agent, "enabled with sync option" do
@@ -453,7 +552,6 @@ shared_examples "Instrumental Agent" do
           server.commands.should include("increment overflow_test 5 300 1")
         end
       end
-
     end
   end
 end
