@@ -501,6 +501,39 @@ shared_examples "Instrumental Agent" do
           diff.should <= 3
         end
       end
+
+      it "should not attempt to resolve DNS more than RESOLUTION_FAILURES_BEFORE_WAITING before introducing an inactive period" do
+        with_constants('Instrumental::Agent::RESOLUTION_FAILURES_BEFORE_WAITING' => 1,
+                       'Instrumental::Agent::RESOLUTION_WAIT' => 2,
+                       'Instrumental::Agent::RESOLVE_TIMEOUT' => 0.1) do
+          attempted_resolutions = 0
+          Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+        end
+      end
+
+      it "should attempt to resolve DNS after the RESOLUTION_WAIT inactive period has been exceeded" do
+        with_constants('Instrumental::Agent::RESOLUTION_FAILURES_BEFORE_WAITING' => 1,
+                       'Instrumental::Agent::RESOLUTION_WAIT' => 2,
+                       'Instrumental::Agent::RESOLVE_TIMEOUT' => 0.1) do
+          attempted_resolutions = 0
+          Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+          sleep 2
+          agent.gauge('test', 1)
+          attempted_resolutions.should == 2
+        end
+      end
     end
 
     describe Instrumental::Agent, "enabled with sync option" do

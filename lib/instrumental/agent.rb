@@ -9,17 +9,19 @@ require 'socket'
 
 module Instrumental
   class Agent
-    BACKOFF             = 2.0
-    CONNECT_TIMEOUT     = 20
-    EXIT_FLUSH_TIMEOUT  = 5
-    HOSTNAME            = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
-    MAX_BUFFER          = 5000
-    MAX_RECONNECT_DELAY = 15
-    REPLY_TIMEOUT       = 10
-    RESOLVE_TIMEOUT     = 1
+    BACKOFF                            = 2.0
+    CONNECT_TIMEOUT                    = 20
+    EXIT_FLUSH_TIMEOUT                 = 5
+    HOSTNAME                           = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
+    MAX_BUFFER                         = 5000
+    MAX_RECONNECT_DELAY                = 15
+    REPLY_TIMEOUT                      = 10
+    RESOLUTION_FAILURES_BEFORE_WAITING = 3
+    RESOLUTION_WAIT                    = 30
+    RESOLVE_TIMEOUT                    = 1
 
 
-    attr_accessor :host, :port, :synchronous, :queue
+    attr_accessor :host, :port, :synchronous, :queue, :dns_resolutions, :last_connect_at
     attr_reader :connection, :enabled, :secure
 
     def self.logger=(l)
@@ -73,6 +75,8 @@ module Instrumental
       @pid             = Process.pid
       @allow_reconnect = true
       @certs           = certificates
+      @dns_resolutions = 0
+      @last_connect_at = 0
 
       setup_cleanup_at_exit if @enabled
     end
@@ -199,6 +203,9 @@ module Instrumental
         @thread.kill
         @thread = nil
       end
+      if @queue
+        @queue.clear
+      end
     end
 
     # Called when a process is exiting to give it some extra time to
@@ -259,9 +266,16 @@ module Instrumental
       logger.error "Exception occurred: #{e.message}\n#{e.backtrace.join("\n")}"
     end
 
-    def ipv4_address_for_host(host, port)
-      with_timeout(RESOLVE_TIMEOUT) do
-        Resolv.getaddresses(host).select { |address| address =~ Resolv::IPv4::Regex }.first
+    def ipv4_address_for_host(host, port, moment_to_connect = Time.now.to_i)
+      self.dns_resolutions  = dns_resolutions + 1
+      time_since_last_connect = moment_to_connect - last_connect_at
+      if dns_resolutions < RESOLUTION_FAILURES_BEFORE_WAITING || time_since_last_connect >= RESOLUTION_WAIT
+        self.last_connect_at = moment_to_connect
+        with_timeout(RESOLVE_TIMEOUT) do
+          address  = Resolv.getaddresses(host).select { |address| address =~ Resolv::IPv4::Regex }.first
+          self.dns_resolutions = 0
+          address
+        end
       end
     rescue Exception => e
       logger.warn "Couldn't resolve address for #{host}:#{port}"
@@ -272,6 +286,7 @@ module Instrumental
     def send_command(cmd, *args)
       cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
       if enabled?
+
         start_connection_worker if !running?
         if @queue && @queue.size < MAX_BUFFER
           @queue_full_warning = false
@@ -352,10 +367,10 @@ module Instrumental
     def start_connection_worker
       if enabled?
         disconnect
+        @queue ||= Queue.new
         address = ipv4_address_for_host(@host, @port)
         if address
           @pid = Process.pid
-          @queue = Queue.new
           @sync_mutex = Mutex.new
           @failures = 0
           @sockaddr_in = Socket.pack_sockaddr_in(@port, address)
