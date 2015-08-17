@@ -1,3 +1,9 @@
+### 0.13.2 [August 17, 2015]
+* DNS resolution fixes to prevent fork'd child deadlocks
+
+### 0.13.1 [August 3, 2015]
+* Revert encrypted support
+
 ### 0.13.0 [August 3, 2015]
 * Add support for encrypted transport, tests for same
 
