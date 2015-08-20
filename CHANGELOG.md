@@ -1,3 +1,6 @@
+### 0.13.3 [August 18, 2015]
+* Fixes for when agent is disconnected from server
+
 ### 0.13.2 [August 17, 2015]
 * DNS resolution fixes to prevent fork'd child deadlocks
 
