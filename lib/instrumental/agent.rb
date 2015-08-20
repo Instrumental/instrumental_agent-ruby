@@ -499,6 +499,8 @@ module Instrumental
 
     def flush_socket(socket)
       socket.flush
+    rescue Exception => e
+      logger.error "Error flushing socket, #{e.message}"
     end
 
     def disconnect
@@ -513,6 +515,9 @@ module Instrumental
         end
         @socket.close
       end
+    rescue Exception => e
+      logger.error "Error closing socket, #{e.message}"
+    ensure
       @socket = nil
     end
 
