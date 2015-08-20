@@ -499,6 +499,8 @@ module Instrumental
 
     def flush_socket(socket)
       socket.flush
+    rescue Exception => e
+      logger.error "Error flushing socket, #{e.message}"
     end
 
     def disconnect
