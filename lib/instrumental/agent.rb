@@ -513,6 +513,9 @@ module Instrumental
         end
         @socket.close
       end
+    rescue Exception => e
+      logger.error "Error closing socket, #{e.message}"
+    ensure
       @socket = nil
     end
 
