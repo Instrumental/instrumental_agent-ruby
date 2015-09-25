@@ -534,6 +534,57 @@ shared_examples "Instrumental Agent" do
           attempted_resolutions.should == 2
         end
       end
+
+      it "should attempt to resolve DNS after a connection timeout" do
+        with_constants('Instrumental::Agent::CONNECT_TIMEOUT' => 1) do
+          attempted_opens = 0
+          open_sleep = 0
+          os = agent.method(:open_socket)
+          agent.stub(:open_socket) { |*args, &block| attempted_opens +=1 ; sleep(open_sleep) && os.call(*args) }
+
+          # Connect normally and start running worker loop
+          attempted_resolutions = 0
+          ga = Resolv.method(:getaddresses)
+          Resolv.stub(:getaddresses) { |*args, &block| attempted_resolutions +=1 ; ga.call(*args) }
+          agent.gauge('test', 1)
+          wait 2
+          attempted_resolutions.should == 1
+          attempted_opens.should == 1
+          agent.should be_running
+
+          # Setup a failure for the next command so we'll break out of the inner
+          # loop in run_worker_loop causing another call to open_socket
+          test_connection_fail = true
+          tc = agent.method(:test_connection)
+          agent.stub(:test_connection) { |*args, &block| test_connection_fail ? raise("fail") : tc.call(*args) }
+
+          # Setup a timeout failure in open_socket for the next command
+          open_sleep = 5
+
+          # 1. test_connection fails, triggering a retry, which hits open_socket
+          # 2. we hit open_socket, it times out causing worker thread to end
+          agent.gauge('test', 1)
+          wait 5
+          # On retry we attempt to open_socket, but this times out
+          attempted_opens.should == 2
+          # We don't resolve again yet, we just disconnect
+          attempted_resolutions.should == 1
+          agent.should_not be_running
+
+          # Make test_connection succeed on the next command
+          test_connection_fail = false
+          # Make open_socket succeed again
+          open_sleep = 0
+
+          # We reconnect on the next command
+          # The reconnect causes a new DNS resolution
+          agent.gauge('test', 1)
+          wait 5
+          attempted_resolutions.should == 2
+          attempted_opens.should == 3
+          agent.should be_running
+        end
+      end
     end
 
     describe Instrumental::Agent, "enabled with sync option" do

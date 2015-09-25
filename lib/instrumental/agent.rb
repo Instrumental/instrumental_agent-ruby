@@ -458,7 +458,7 @@ module Instrumental
       case err
       when EOFError
         # nop
-      when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE
+      when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE, Timeout::Error
         # If the connection has been refused by Instrumental
         # or we cannot reach the server
         # or the connection state of this socket is in a race
