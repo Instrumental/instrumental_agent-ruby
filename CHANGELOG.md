@@ -1,3 +1,6 @@
+### 0.13.4 [October 6, 2015]
+* Fixes for when agent times out communicating with server
+
 ### 0.13.3 [August 18, 2015]
 * Fixes for when agent is disconnected from server
 
