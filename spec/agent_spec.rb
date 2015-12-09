@@ -89,6 +89,11 @@ shared_examples "Instrumental Agent" do
         server.connect_count.should == 0
       end
 
+      it "should show as authenticated" do
+        agent.authenticate!
+        agent.should be_authenticated
+      end
+
       it "should connect to the server after sending a metric" do
         agent.increment("test.foo")
         wait
@@ -439,6 +444,10 @@ shared_examples "Instrumental Agent" do
           wait
           # Metrics should not have been sent since all authentication failed
           agent.queue.pop(true).should include("increment reconnect_test 1 1234 1\n")
+        end
+
+        it "should not be authenticated" do
+          agent.should_not be_authenticated
         end
       end
 

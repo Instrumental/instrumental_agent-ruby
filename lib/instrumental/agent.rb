@@ -81,6 +81,23 @@ module Instrumental
       setup_cleanup_at_exit if @enabled
     end
 
+    def authenticate!(reload = false)
+      if running?
+        authenticated?
+      else
+        start_connection_worker
+        3.times do
+          break if authenticated?
+          sleep 1
+        end
+        authenticated?
+      end
+    end
+
+    def authenticated?
+      @authenticated
+    end
+
     # Store a gauge for a metric, optionally at a specific time.
     #
     #  agent.gauge('load', 1.23)
@@ -428,6 +445,7 @@ module Instrumental
 
       send_with_reply_timeout "hello #{hello_options}"
       send_with_reply_timeout "authenticate #{@api_key}"
+      @authenticated = true
       @failures = 0
       loop do
         command_and_args, command_options = @queue.pop
