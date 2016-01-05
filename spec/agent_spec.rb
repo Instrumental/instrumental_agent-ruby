@@ -20,17 +20,23 @@ shared_examples "Instrumental Agent" do
     # secure? and verify_cert? are set
 
     # Agent options
-    let(:enabled)      { true }
-    let(:synchronous)  { false }
-    let(:token)        { 'test_token' }
-    let(:address)      { server.host_and_port }
-    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
+    let(:enabled)       { true }
+    let(:synchronous)   { false }
+    let(:token)         { 'test_token' }
+    let(:address)       { server.host_and_port }
+    let(:agent_options) { { collector:   address,
+                            synchronous: synchronous,
+                            enabled:     enabled,
+                            secure:      secure?,
+                            verify_cert: verify_cert?
+                          } }
+    let(:agent)         { Instrumental::Agent.new(token, agent_options) }
 
     # Server options
-    let(:listen)       { true }
-    let(:response)     { true }
-    let(:authenticate) { true }
-    let(:server)       { TestServer.new(:listen => listen, :authenticate => authenticate, :response => response, :secure => secure?) }
+    let(:listen)        { true }
+    let(:response)      { true }
+    let(:authenticate)  { true }
+    let(:server)        { TestServer.new(:listen => listen, :authenticate => authenticate, :response => response, :secure => secure?) }
 
     before do
       Instrumental::Agent.logger.level = Logger::UNKNOWN
@@ -104,6 +110,22 @@ shared_examples "Instrumental Agent" do
         server.commands[0].should =~ / pid /
         server.commands[0].should =~ / runtime /
         server.commands[0].should =~ / platform /
+      end
+
+      it "should hello handshake itself with application name, if provided" do
+        agent = Instrumental::Agent.new(token, agent_options.merge(application_name: "Beep Boop\\ BEEP Boop"))
+        agent.increment("no.op")
+        wait
+        server.commands[0].should =~ /hello .*/
+        server.commands[0].should =~ / application_name Beep_Boop_BEEP_Boop/
+      end
+
+      it "should hello handshake itself with 'on behalf of', if provided" do
+        agent = Instrumental::Agent.new(token, agent_options.merge(on_behalf_of: "Instrumental Tools/Debian/0.0.1"))
+        agent.increment("no.op")
+        wait
+        server.commands[0].should =~ /hello .*/
+        server.commands[0].should =~ / on_behalf_of Instrumental_Tools\/Debian\/0_0_1/
       end
 
       it "should authenticate using the token" do

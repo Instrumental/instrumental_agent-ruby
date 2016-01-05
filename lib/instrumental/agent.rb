@@ -21,8 +21,18 @@ module Instrumental
     RESOLVE_TIMEOUT                    = 1
 
 
-    attr_accessor :host, :port, :synchronous, :queue, :dns_resolutions, :last_connect_at
-    attr_reader :connection, :enabled, :secure
+    attr_accessor :dns_resolutions,
+                  :host,
+                  :last_connect_at,
+                  :port,
+                  :queue,
+                  :synchronous
+
+    attr_reader :application_name,
+                :connection,
+                :enabled,
+                :on_behalf_of,
+                :secure
 
     def self.logger=(l)
       @logger = l
@@ -66,17 +76,19 @@ module Instrumental
         end
         desired_secure = false
       end
-      @secure          = desired_secure
-      @verify_cert     = options[:verify_cert].nil? ? true : !!options[:verify_cert]
-      default_port     = @secure ? 8001 : 8000
-      @port            = (@port || default_port).to_i
-      @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
-      @synchronous     = !!options[:synchronous]
-      @pid             = Process.pid
-      @allow_reconnect = true
-      @certs           = certificates
-      @dns_resolutions = 0
-      @last_connect_at = 0
+      @secure           = desired_secure
+      @verify_cert      = options[:verify_cert].nil? ? true : !!options[:verify_cert]
+      default_port      = @secure ? 8001 : 8000
+      @port             = (@port || default_port).to_i
+      @enabled          = options.has_key?(:enabled) ? !!options[:enabled] : true
+      @synchronous      = !!options[:synchronous]
+      @pid              = Process.pid
+      @allow_reconnect  = true
+      @certs            = certificates
+      @dns_resolutions  = 0
+      @last_connect_at  = 0
+      @application_name = options[:application_name]
+      @on_behalf_of     = options[:on_behalf_of]
 
       setup_cleanup_at_exit if @enabled
     end
@@ -410,6 +422,19 @@ module Instrumental
       sock
     end
 
+    def hello_options
+      options = {
+        "version"  => "ruby/instrumental_agent/#{VERSION}",
+        "hostname" => HOSTNAME,
+        "pid"      => Process.pid,
+        "runtime"  => "#{defined?(RUBY_ENGINE) ? RUBY_ENGINE : "ruby"}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
+        "platform" => RUBY_PLATFORM,
+      }
+      options["application_name"] = application_name if application_name
+      options["on_behalf_of"] = on_behalf_of if on_behalf_of
+      options
+    end
+
     def run_worker_loop
       command_and_args = nil
       command_options = nil
@@ -418,15 +443,9 @@ module Instrumental
         @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
       end
       logger.info "connected to collector at #{host}:#{port}"
-      hello_options = {
-        "version" => "ruby/instrumental_agent/#{VERSION}",
-        "hostname" => HOSTNAME,
-        "pid" => Process.pid,
-        "runtime" => "#{defined?(RUBY_ENGINE) ? RUBY_ENGINE : "ruby"}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
-        "platform" => RUBY_PLATFORM
-      }.to_a.flatten.map { |v| v.to_s.gsub(/\s+/, "_") }.join(" ")
 
-      send_with_reply_timeout "hello #{hello_options}"
+      hello_command = "hello " + hello_options.to_a.flatten.map { |v| v.to_s.gsub(/[^\/\w]+/, "_").gsub(/\s+/, "_") }.join(" ")
+      send_with_reply_timeout hello_command
       send_with_reply_timeout "authenticate #{@api_key}"
       @failures = 0
       loop do
