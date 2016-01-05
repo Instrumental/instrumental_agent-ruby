@@ -367,7 +367,7 @@ shared_examples "Instrumental Agent" do
           agent.gauge('connection_test', 1, 1234)
           # nope:9999 does not resolve to anything, the agent will not resolve
           # the address and refuse to start a worker thread
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
         end
       end
 
@@ -396,7 +396,7 @@ shared_examples "Instrumental Agent" do
           wait
           # The agent thread should have stopped running since the network write would
           # have failed. The queue will still contain the metric that has yet to be sent
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
           agent.queue.size.should == 1
 
         end
@@ -413,7 +413,7 @@ shared_examples "Instrumental Agent" do
           wait
           # The agent thread should have stopped running since the network write would
           # have failed. The queue will still contain the metric that has yet to be sent
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
           agent.queue.size.should == 1
           wait
           # Start the server back up again
@@ -423,7 +423,7 @@ shared_examples "Instrumental Agent" do
           agent.gauge('connection_failure', 1, 1234)
           wait
           # The agent should now be running the background thread, and the queue should be empty
-          agent.should be_running
+          expect(agent.send(:running?)).to eq(true)
           agent.queue.size.should == 0
         end
 
@@ -510,10 +510,10 @@ shared_examples "Instrumental Agent" do
           Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
           agent.gauge('test', 1)
           attempted_resolutions.should == 1
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
           agent.gauge('test', 1)
           attempted_resolutions.should == 1
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
         end
       end
 
@@ -525,10 +525,10 @@ shared_examples "Instrumental Agent" do
           Resolv.stub(:getaddresses) { attempted_resolutions +=1 ; sleep 1 }
           agent.gauge('test', 1)
           attempted_resolutions.should == 1
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
           agent.gauge('test', 1)
           attempted_resolutions.should == 1
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
           sleep 2
           agent.gauge('test', 1)
           attempted_resolutions.should == 2
@@ -550,7 +550,7 @@ shared_examples "Instrumental Agent" do
           wait 2
           attempted_resolutions.should == 1
           attempted_opens.should == 1
-          agent.should be_running
+          expect(agent.send(:running?)).to eq(true)
 
           # Setup a failure for the next command so we'll break out of the inner
           # loop in run_worker_loop causing another call to open_socket
@@ -569,7 +569,7 @@ shared_examples "Instrumental Agent" do
           attempted_opens.should == 2
           # We don't resolve again yet, we just disconnect
           attempted_resolutions.should == 1
-          agent.should_not be_running
+          expect(agent.send(:running?)).to eq(false)
 
           # Make test_connection succeed on the next command
           test_connection_fail = false
@@ -582,7 +582,7 @@ shared_examples "Instrumental Agent" do
           wait 5
           attempted_resolutions.should == 2
           attempted_opens.should == 3
-          agent.should be_running
+          expect(agent.send(:running?)).to eq(true)
         end
       end
     end
