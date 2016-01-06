@@ -1,6 +1,7 @@
 ### Untagged
 * Add the ability to set an `application_name` as part of the hello handshake
-* Add the ability to set an `on_behalf_of` as part of the hello handshake
+* Add the ability to set an `on_behalf_of` as part of the hello handshake (internal use)
+* RSpec 3 for test suite
 
 ### 0.13.4 [October 6, 2015]
 * Fixes for when agent times out communicating with server
