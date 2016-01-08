@@ -1,3 +1,6 @@
+### Untagged
+* RSpec 3 for test suite
+
 ### 0.13.4 [October 6, 2015]
 * Fixes for when agent times out communicating with server
 

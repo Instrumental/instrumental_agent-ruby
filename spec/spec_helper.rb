@@ -11,6 +11,8 @@ RSpec.configure do |config|
   config.after(:all) do
   end
 
+  config.raise_errors_for_deprecations!
+
 end
 
 
