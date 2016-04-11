@@ -129,6 +129,17 @@ shared_examples "Instrumental Agent" do
         expect(server.commands.last).to match(/gauge time_value_test .* #{now.to_i}/)
       end
 
+      it "should report a time_ms as gauge and return the block result" do
+        allow(Time).to receive(:now).and_return(100)
+        return_value = agent.time_ms("time_value_test") do
+          allow(Time).to receive(:now).and_return(101)
+          1 + 1
+        end
+        expect(return_value).to eq(2)
+        wait
+        expect(server.commands.last).to match(/gauge time_value_test 1000/)
+      end
+
       it "should return the value gauged" do
         expect(agent.gauge('gauge_test', 123)).to eq(123)
         expect(agent.gauge('gauge_test', 989)).to eq(989)
