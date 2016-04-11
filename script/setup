@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+cd "$(dirname "$0")/.."
+
+type rbenv || $(brew install rbenv; brew install ruby-build)
+rbenv which ruby || $(brew upgrade ruby-build || true; rbenv install)
+gem list -i bundler || gem install bundler
+bundle install
