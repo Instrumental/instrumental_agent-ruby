@@ -358,12 +358,11 @@ shared_examples "Instrumental Agent" do
       end
 
       context 'bad address' do
-        let(:address) { "nope:9999" }
+        let(:address) { "bad-address:9999" }
 
         it "should not be running if it cannot connect" do
+          expect(Resolv).to receive(:getaddresses).with("bad-address").and_raise Resolv::ResolvError
           agent.gauge('connection_test', 1, 1234)
-          # nope:9999 does not resolve to anything, the agent will not resolve
-          # the address and refuse to start a worker thread
           expect(agent.send(:running?)).to eq(false)
         end
       end
