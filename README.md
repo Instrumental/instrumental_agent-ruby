@@ -10,17 +10,17 @@ Add the gem to your Gemfile.
 gem 'instrumental_agent'
 ```
 
-Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then  initialize the agent with your API key, found in the Docs section.
+Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then initialize the agent with your API key, found in the Docs section.
 
-```sh
+```ruby
 I = Instrumental::Agent.new('YOUR_API_KEY', :enabled => Rails.env.production?)
 ```
 
-You'll  probably want something like the above, only enabling the agent in production mode so you don't have development and production data writing to the same value. Or you can setup two projects, so that you can verify stats in one, and release them to production in another.
+You'll probably want something like the above, only enabling the agent in production mode so you don't have development and production data writing to the same value. Or you can setup two projects, so that you can verify stats in one, and release them to production in another.
 
 Now you can begin to use Instrumental to track your application.
 
-```sh
+```ruby
 I.gauge('load', 1.23)                # value at a point in time
 
 I.increment('signups')               # increasing value, think "events"
@@ -37,20 +37,20 @@ end
 
 Want to track an event (like an application deploy, or downtime)? You can capture events that are instantaneous, or events that happen over a period of time.
 
-```sh
+```ruby
 I.notice('Jeffy deployed rev ef3d6a') # instantaneous event
 I.notice('Testing socket buffer increase', 3.days.ago, 20.minutes) # an event with a duration
 ```
 
 ## Backfilling
 
-Streaming data is better with a little historical context. Instrumental lets you  backfill data, allowing you to see deep into your project's past.
+Streaming data is better with a little historical context. Instrumental lets you backfill data, allowing you to see deep into your project's past.
 
 When backfilling, you may send tens of thousands of metrics per second, and the command buffer may start discarding data it isn't able to send fast enough. We provide a synchronous mode that will ensure every stat makes it to Instrumental before continuing on to the next.
 
 **Warning**: You should only enable synchronous mode for backfilling data as any issues with the Instrumental service issues will cause this code to halt until it can reconnect.
 
-```sh
+```ruby
 I.synchronous = true # every command sends immediately
 User.find_each do |user|
   I.increment('signups', 1, user.created_at)
@@ -73,7 +73,7 @@ Need to quickly disable the agent? set :enabled to false on initialization and y
 
 ## Capistrano Integration
 
-Add `require "instrumental/capistrano"` to your capistrano configuration and your deploys will be tracked by Instrumental.  Add the API token for the project you want to track to by setting the following Capistrano var:
+Add `require "instrumental/capistrano"` to your capistrano configuration and your deploys will be tracked by Instrumental. Add the API token for the project you want to track to by setting the following Capistrano var:
 
 ```ruby
 set :instrumental_key, "MY_API_KEY"
@@ -93,9 +93,9 @@ The default message sent is "USER deployed COMMIT_HASH". If you need to customiz
 
 ## Tracking metrics in Resque jobs (and Resque-like scenarios)
 
-If you plan on tracking metrics in Resque jobs, you will need to explicitly cleanup after the agent when the jobs are finished.  You can accomplish this by adding `after_perform` and `on_failure` hooks to your Resque jobs.  See the Resque [hooks documentation](https://github.com/resque/resque/blob/master/docs/HOOKS.md) for more information.
+If you plan on tracking metrics in Resque jobs, you will need to explicitly cleanup after the agent when the jobs are finished. You can accomplish this by adding `after_perform` and `on_failure` hooks to your Resque jobs. See the Resque [hooks documentation](https://github.com/resque/resque/blob/master/docs/HOOKS.md) for more information.
 
-You're required to do this because Resque calls `exit!` when a worker has finished processing, which bypasses Ruby's `at_exit` hooks.  The Instrumental Agent installs an `at_exit` hook to flush any pending metrics to the servers, but this hook is bypassed by the `exit!` call; any other code you rely that uses `exit!` should call `I.cleanup` to ensure any pending metrics are correctly sent to the server before exiting the process.
+You're required to do this because Resque calls `exit!` when a worker has finished processing, which bypasses Ruby's `at_exit` hooks. The Instrumental Agent installs an `at_exit` hook to flush any pending metrics to the servers, but this hook is bypassed by the `exit!` call; any other code you rely that uses `exit!` should call `I.cleanup` to ensure any pending metrics are correctly sent to the server before exiting the process.
 
 ## Using with Ruby Enterprise Edition
 
