@@ -61,7 +61,7 @@ end
 
 ## Server Stats
 
-Want some general server stats (load, memory, etc.)? Check out the [instrumental_tools](https://github.com/expectedbehavior/instrumental_tools) gem.
+Want some general server stats (load, memory, etc.)? Check out the [instrumental_tools](https://github.com/instrumental/instrumental_tools) gem.
 
 ```sh
 gem install instrumental_tools

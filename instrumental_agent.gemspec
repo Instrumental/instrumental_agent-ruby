@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.version     = Instrumental::VERSION
   s.authors     = ["Elijah Miller", "Christopher Zelenak", "Kristopher Chambers", "Matthew Hassfurder"]
   s.email       = ["support@instrumentalapp.com"]
-  s.homepage    = "http://github.com/expectedbehavior/instrumental_agent"
+  s.homepage    = "http://github.com/instrumental/instrumental_agent-ruby"
   s.summary     = %q{Custom metric monitoring for Ruby applications via Instrumental}
   s.description = %q{This agent supports Instrumental custom metric monitoring for Ruby applications. It provides high-data reliability at high scale, without ever blocking your process or causing an exception.}
   s.license     = "MIT"

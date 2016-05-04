@@ -71,7 +71,7 @@
 * Fix for dead lock issuew
 
 ### 0.9.5 [March 23rd, 2012]
-* Defer startup of agent thread until metrics are submitted - this update is strongly recommended for anyone using Ruby Enterprise Edition in concert w/ a preforking application server (like Phusion Passenger).  See the [REE wiki page](https://github.com/expectedbehavior/instrumental_agent/wiki/Using-with-Ruby-Enterprise-Edition) for more information.
+* Defer startup of agent thread until metrics are submitted - this update is strongly recommended for anyone using Ruby Enterprise Edition in concert w/ a preforking application server (like Phusion Passenger).
 * Add .stop method for cancelling agent processing
 * Changes to how defaults are processed at initialization
 * Documentation for usage w/ Resque and Resque like scenarios
@@ -118,7 +118,7 @@
 * Code cleanup
 
 ### 0.5.1 [December 12, 2011]
-* instrument_server moved to instrumental_tools gem (https://github.com/expectedbehavior/instrumental_tools)
+* instrument_server moved to instrumental_tools gem (https://github.com/instrumental/instrumental_tools)
 
 ### 0.5 [December 9, 2011]
 * Allow negative numbers to be submitted
