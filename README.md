@@ -103,3 +103,22 @@ You're required to do this because Resque calls `exit!` when a worker has finish
 ## Troubleshooting & Help
 
 We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com).
+
+
+## Release Process
+
+1. Pull latest master
+2. Merge feature branch(es) into master
+3. `script/test`
+4. Increment version in:
+  - `lib/instrumental/version.rb`
+5. Update [CHANGELOG.md](CHANGELOG.md)
+6. Commit "Release vX.Y.Z"
+7. Push to GitHub
+8. Release packages: `rake release`
+9. Update documentation on instrumentalapp.com
+
+
+## Version Policy
+
+This library follows [Semantic Versioning 2.0.0](http://semver.org).
