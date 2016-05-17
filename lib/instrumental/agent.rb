@@ -366,6 +366,8 @@ module Instrumental
     end
 
     def start_connection_worker
+      # NOTE: We need a mutex around both `running?` and thread creation,
+      # otherwise we could create two threads.
       @start_worker_mutex.synchronize do
         return if running?
         return unless enabled?
