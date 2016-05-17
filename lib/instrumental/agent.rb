@@ -77,6 +77,7 @@ module Instrumental
       @certs           = certificates
       @dns_resolutions = 0
       @last_connect_at = 0
+      @start_worker_mutex = Mutex.new
 
       setup_cleanup_at_exit if @enabled
     end
@@ -287,7 +288,7 @@ module Instrumental
       cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
       if enabled?
 
-        start_connection_worker if !running?
+        start_connection_worker
         if @queue && @queue.size < MAX_BUFFER
           @queue_full_warning = false
           logger.debug "Queueing: #{cmd.chomp}"
@@ -365,7 +366,9 @@ module Instrumental
     end
 
     def start_connection_worker
-      if enabled?
+      @start_worker_mutex.synchronize do
+        return if running?
+        return unless enabled?
         disconnect
         @queue ||= Queue.new
         address = ipv4_address_for_host(@host, @port)
