@@ -235,6 +235,25 @@ shared_examples "Instrumental Agent" do
         end
       end
 
+      it "shouldn't start multiple background threads" do
+        # Force a wait that would cause a race condition
+        allow(agent).to receive(:disconnect) {
+          sleep 1
+        }
+
+        run_worker_loop_calls = 0
+        allow(agent).to receive(:run_worker_loop) {
+          run_worker_loop_calls += 1
+          sleep 3 # keep the worker thread alive
+        }
+
+        t = Thread.new { agent.increment("race") }
+        agent.increment("race")
+        wait(2)
+        expect(run_worker_loop_calls).to eq(1)
+        expect(agent.queue.size).to eq(2)
+      end
+
       it "should never let an exception reach the user" do
         expect(agent).to receive(:send_command).twice { raise(Exception.new("Test Exception")) }
         expect(agent.increment('throws_exception', 2)).to eq(nil)
