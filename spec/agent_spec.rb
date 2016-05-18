@@ -233,6 +233,20 @@ shared_examples "Instrumental Agent" do
           expect(server.commands).to include("increment fork_reconnect_test 1 3 1")
           expect(server.commands).to include("increment fork_reconnect_test 1 4 1")
         end
+
+        it "shouldn't double send queued commands on fork" do
+          server.stop
+          wait
+          agent.increment("fork.test", 1, 1234)
+          expect(agent.queue.size).to eq(1)
+          server.listen
+          fork do
+            agent.increment("this.should.cause.a.connection.in_fork", 1, 1234)
+          end
+          agent.increment("this.should.cause.a.connection.outside_fork", 1, 1234)
+          wait
+          expect(server.commands.grep(/fork\.test/).size).to eq(1)
+        end
       end
 
       it "should never let an exception reach the user" do
