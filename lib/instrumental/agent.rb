@@ -78,6 +78,7 @@ module Instrumental
       @dns_resolutions = 0
       @last_connect_at = 0
       @start_worker_mutex = Mutex.new
+      @queue = Queue.new
 
       setup_cleanup_at_exit if @enabled
     end
@@ -368,11 +369,13 @@ module Instrumental
     def start_connection_worker
       # NOTE: We need a mutex around both `running?` and thread creation,
       # otherwise we could create two threads.
-      @start_worker_mutex.synchronize do
+      # Return early and queue the message if another thread is
+      # starting the worker.
+      return if !@start_worker_mutex.try_lock
+      begin
         return if running?
         return unless enabled?
         disconnect
-        @queue ||= Queue.new
         address = ipv4_address_for_host(@host, @port)
         if address
           @pid = Process.pid
@@ -384,6 +387,8 @@ module Instrumental
             run_worker_loop
           end
         end
+      ensure
+        @start_worker_mutex.unlock
       end
     end
 
