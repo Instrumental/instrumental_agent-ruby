@@ -1,3 +1,6 @@
+### 1.0.1 [July 12, 2016]
+* Make agent initialization threadsafe
+
 ### 1.0.0 [May 13, 2016]
 * No significant code changes
 
