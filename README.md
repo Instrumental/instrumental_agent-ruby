@@ -12,10 +12,10 @@ Add the gem to your Gemfile.
 gem 'instrumental_agent'
 ```
 
-Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then initialize the agent with your API key, found in the Docs section.
+Visit [instrumentalapp.com](https://instrumentalapp.com) and create an account, then initialize the agent with your [project API token](https://instrumentalapp.com/docs/tokens).
 
 ```ruby
-I = Instrumental::Agent.new('YOUR_API_KEY', :enabled => Rails.env.production?)
+I = Instrumental::Agent.new('PROJECT_API_TOKEN', :enabled => Rails.env.production?)
 ```
 
 You'll probably want something like the above, only enabling the agent in production mode so you don't have development and production data writing to the same value. Or you can setup two projects, so that you can verify stats in one, and release them to production in another.
