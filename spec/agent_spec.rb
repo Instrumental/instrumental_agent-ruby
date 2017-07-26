@@ -113,6 +113,7 @@ shared_examples "Instrumental Agent" do
       end
 
       it "should report a gauge" do
+        Timecop.freeze
         now = Time.now
         agent.gauge('gauge_test', 123)
         wait

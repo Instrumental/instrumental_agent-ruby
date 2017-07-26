@@ -2,10 +2,15 @@ $: << File.join(File.dirname(__FILE__), "..", "lib")
 
 require 'instrumental_agent'
 require 'test_server'
+require 'timecop'
 
 RSpec.configure do |config|
 
   config.before(:all) do
+  end
+
+  config.before(:each) do
+    Timecop.return
   end
 
   config.after(:all) do
