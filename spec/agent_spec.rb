@@ -524,8 +524,14 @@ shared_examples "Instrumental Agent" do
         wait
         expect(agent).to receive(:flush_socket) do
           r, w = IO.pipe
-          Thread.new do
-            IO.select([r]) # mimic an endless blocking select poll
+          Thread.new do # JRuby requires extra thread here according to e9bb707e
+            begin
+              IO.select([r]) # mimic an endless blocking select poll
+            rescue Object => ex
+              # This rescue-raise prevents JRuby from printing a backtrace at
+              # the end of the run complaining about an exception in this thread.
+              raise
+            end
           end.join
         end
         with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
