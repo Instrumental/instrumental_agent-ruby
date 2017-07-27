@@ -77,15 +77,14 @@ class TestServer
         end
       rescue Exception => err
         unless @stopping
-          puts "EXCEPTION:", err unless @stopping
+          puts "EXCEPTION:", err.inspect, err.backtrace.join("\n")
           retry
         end
       end
     end
     # puts "server up"
   rescue Errno::EADDRINUSE => err
-    puts "#{err.inspect} failed to get port #{@port}"
-    puts err.message
+    puts "#{err.inspect} failed to get port #{@port}", err.message
     @port += 1
     retry
   end
