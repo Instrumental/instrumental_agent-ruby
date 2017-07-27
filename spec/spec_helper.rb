@@ -1,8 +1,10 @@
 $: << File.join(File.dirname(__FILE__), "..", "lib")
 
-require 'instrumental_agent'
+require 'rubygems'
+require 'bundler/setup'
+Bundler.require(:default, :development)
+
 require 'test_server'
-require 'timecop'
 
 RSpec.configure do |config|
 
