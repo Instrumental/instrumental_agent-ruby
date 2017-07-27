@@ -5,6 +5,7 @@ require 'openssl' rescue nil
 require 'resolv'
 require 'thread'
 require 'socket'
+require 'metrician'
 
 
 module Instrumental
@@ -81,6 +82,9 @@ module Instrumental
       @queue = Queue.new
 
       setup_cleanup_at_exit if @enabled
+
+      Metrician.activate(self)
+      Metrician.logger = logger
     end
 
     # Store a gauge for a metric, optionally at a specific time.
