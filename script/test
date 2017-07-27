@@ -2,5 +2,35 @@
 set -e
 cd "$(dirname "$0")/.."
 
-script/setup
-bundle exec rspec
+eval "$(rbenv init - --no-rehash)"
+
+rspec_file_line="$1"
+if [[ "$rspec_file_line" != "" ]]; then
+  rspec_file_line="[${rspec_file_line}]"
+fi
+
+success="true"
+
+for ruby_version in `ruby -ryaml -e 'puts YAML.load(File.read(".travis.yml"))["rvm"].join(" ")'`; do
+  {
+    echo "testing ruby version $ruby_version" &&
+      rbenv shell $ruby_version &&
+      bundle exec rspec
+  } || success="false"
+done
+
+if [ $success == "true" ]; then
+  tput bold    # bold text
+  tput setaf 2 # green text
+  echo "======================================"
+  echo "=              Passed                ="
+  echo "======================================"
+  tput sgr0    # reset to default text
+else
+  tput bold    # bold text
+  tput setaf 1 # red text
+  echo "======================================"
+  echo "=              FAILED                ="
+  echo "======================================"
+  tput sgr0    # reset to default text
+fi

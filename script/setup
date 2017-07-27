@@ -2,7 +2,25 @@
 set -e
 cd "$(dirname "$0")/.."
 
-type rbenv || $(brew install rbenv; brew install ruby-build)
-rbenv which ruby || $(brew upgrade ruby-build || true; rbenv install)
-gem list -i bundler || gem install bundler
-bundle install
+rbenv which ruby >/dev/null 2>&1 || (brew upgrade ruby-build || true; rbenv install)
+
+# Setup rbenv so we can switch rubies below
+eval "$(rbenv init - --no-rehash)"
+
+for ruby_version in `ruby -ryaml -e 'puts YAML.load(File.read(".travis.yml"))["rvm"].join(" ")'`; do
+  rbenv versions --bare | grep "^${ruby_version}$" || rbenv install $ruby_version
+  rbenv shell $ruby_version
+
+  gem list -i bundler >/dev/null || gem install bundler
+
+  bundle install
+done
+
+tput bold    # bold text
+tput setaf 2 # green text
+echo "****************************************************************"
+echo "*                                                              *"
+echo "*                         Good to go!                          *"
+echo "*                                                              *"
+echo "****************************************************************"
+tput sgr0    # reset to default text
