@@ -473,6 +473,7 @@ module Instrumental
         # or we cannot reach the server
         # or the connection state of this socket is in a race
         logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
+        logger.debug "Exception: #{err.inspect}\n#{err.backtrace.join("\n")}"
         allow_reconnect = false
       else
         report_exception(err)
