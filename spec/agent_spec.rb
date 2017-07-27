@@ -328,6 +328,13 @@ shared_examples "Instrumental Agent" do
         tm = Time.now
         agent.increment("foo.bar", 1, tm)
         agent.stop
+
+        # In Java the test server hangs sometimes when the agent disconnects so
+        # this cleans up the server.
+        server.stop
+        wait
+        server.listen
+
         wait
         agent.increment("foo.baz", 1, tm)
         wait

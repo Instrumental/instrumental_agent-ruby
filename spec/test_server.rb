@@ -97,7 +97,10 @@ class TestServer
   def stop
     @stopping = true
     disconnect_all
-    @main_thread.kill if @main_thread
+    if @main_thread
+      @main_thread.kill
+      @main_thread.join # wait for thread to die
+    end
     @main_thread = nil
     @client_threads.each { |thread| thread.kill }
     @client_threads = []
@@ -105,6 +108,8 @@ class TestServer
       @server.close if @server
     rescue Exception => e
     end
+    @server = nil
+    @stopping = false
   end
 
   def fd_for_socket(socket)
@@ -130,8 +135,11 @@ class TestServer
         c.flush
         c.close
       rescue Exception => e
-        puts e.message
-        puts e.backtrace.join("\n")
+        unless @stopping
+          puts "Error in TestServer#disconnect_all"
+          puts e.inspect
+          puts e.backtrace.join("\n")
+        end
       end
     }
     @connections = []
