@@ -77,6 +77,7 @@ shared_examples "Instrumental Agent" do
       end
 
       it "should send metrics to logger" do
+        Timecop.freeze
         now = Time.now
         expect(agent.logger).to receive(:debug).with("gauge metric 1 #{now.to_i} 1")
         agent.gauge("metric", 1)
