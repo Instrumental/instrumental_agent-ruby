@@ -78,13 +78,15 @@ module Instrumental
       @certs           = certificates
       @dns_resolutions = 0
       @last_connect_at = 0
+      @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
       @start_worker_mutex = Mutex.new
       @queue = Queue.new
 
       setup_cleanup_at_exit if @enabled
 
-      Metrician.activate(self)
-      Metrician.logger = logger
+      if @metrician
+        Metrician.activate(self)
+      end
     end
 
     # Store a gauge for a metric, optionally at a specific time.

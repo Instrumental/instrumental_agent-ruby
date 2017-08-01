@@ -24,7 +24,8 @@ shared_examples "Instrumental Agent" do
     let(:synchronous)  { false }
     let(:token)        { 'test_token' }
     let(:address)      { server.host_and_port }
-    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?) }
+    let(:metrician)    { false }
+    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?, :metrician => metrician) }
 
     # Server options
     let(:listen)       { true }
@@ -641,6 +642,32 @@ shared_examples "Instrumental Agent" do
           expect(server.commands).to include("increment overflow_test 3 300 1")
           expect(server.commands).to include("increment overflow_test 4 300 1")
           expect(server.commands).to include("increment overflow_test 5 300 1")
+        end
+      end
+    end
+
+    describe Instrumental::Agent, "metrician" do
+      context "enabled" do
+        let(:metrician) { true }
+
+        it "is enabled by default" do
+          a = agent
+          expect(Metrician.agent).to eq(a)
+        end
+
+        it "uses agent logger" do
+          new_logger = double
+          agent.logger = new_logger
+          expect(Metrician.logger).to eq(new_logger)
+        end
+      end
+
+      context "disabled" do
+        let(:metrician) { false }
+
+        it "can be disbaled" do
+          expect(Metrician).to_not receive(:activate)
+          agent = Instrumental::Agent.new('test-token', :metrician => false)
         end
       end
     end
