@@ -26,6 +26,7 @@ if [ $success == "true" ]; then
   echo "=              Passed                ="
   echo "======================================"
   tput sgr0    # reset to default text
+  exit 0
 else
   tput bold    # bold text
   tput setaf 1 # red text
@@ -33,4 +34,5 @@ else
   echo "=              FAILED                ="
   echo "======================================"
   tput sgr0    # reset to default text
+  exit 1
 fi
