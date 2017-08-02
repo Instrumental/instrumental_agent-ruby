@@ -1,7 +1,19 @@
 require 'spec_helper'
 
-def wait(n=0.2)
-  sleep n # FIXME: hack
+def wait(n=0.2, &block)
+  start = Time.now
+  if block_given?
+    begin
+      yield
+    rescue Exception => ex
+      if (Time.now - start) < 5
+        sleep n
+        retry
+      end
+    end
+  else
+    sleep n
+  end
 end
 
 FORK_SUPPORTED = begin
@@ -53,28 +65,32 @@ shared_examples "Instrumental Agent" do
 
       it "should not connect to the server after receiving a metric" do
         agent.gauge('disabled_test', 1)
-        wait
-        expect(server.connect_count).to eq(0)
+        wait do
+          expect(server.connect_count).to eq(0)
+        end
       end
 
       it "should no op on flush without reconnect" do
         1.upto(100) { agent.gauge('disabled_test', 1) }
         agent.flush(false)
-        wait
-        expect(server.commands).to be_empty
+        wait do
+          expect(server.commands).to be_empty
+        end
       end
 
       it "should no op on flush with reconnect" do
         1.upto(100) { agent.gauge('disabled_test', 1) }
         agent.flush(true)
-        wait
-        expect(server.commands).to be_empty
+        wait do
+          expect(server.commands).to be_empty
+        end
       end
 
       it "should no op on an empty flush" do
         agent.flush(true)
-        wait
-        expect(server.commands).to be_empty
+        wait do
+          expect(server.commands).to be_empty
+        end
       end
 
       it "should send metrics to logger" do
@@ -93,14 +109,16 @@ shared_examples "Instrumental Agent" do
 
       it "should connect to the server after sending a metric" do
         agent.increment("test.foo")
-        wait
-        expect(server.connect_count).to eq(1)
+        wait do
+          expect(server.connect_count).to eq(1)
+        end
       end
 
       it "should announce itself, and include version" do
         agent.increment("test.foo")
-        wait
-        expect(server.commands[0]).to match(/hello .*/)
+        wait do
+          expect(server.commands[0]).to match(/hello .*/)
+        end
         expect(server.commands[0]).to match(/ version /)
         expect(server.commands[0]).to match(/ hostname /)
         expect(server.commands[0]).to match(/ pid /)
@@ -110,16 +128,18 @@ shared_examples "Instrumental Agent" do
 
       it "should authenticate using the token" do
         agent.increment("test.foo")
-        wait
-        expect(server.commands[1]).to eq("authenticate test_token")
+        wait do
+          expect(server.commands[1]).to eq("authenticate test_token")
+        end
       end
 
       it "should report a gauge" do
         Timecop.freeze
         now = Time.now
         agent.gauge('gauge_test', 123)
-        wait
-        expect(server.commands.last).to eq("gauge gauge_test 123 #{now.to_i} 1")
+        wait do
+          expect(server.commands.last).to eq("gauge gauge_test 123 #{now.to_i} 1")
+        end
       end
 
       it "should report a time as gauge and return the block result" do
@@ -128,8 +148,9 @@ shared_examples "Instrumental Agent" do
           1 + 1
         end
         expect(return_value).to eq(2)
-        wait
-        expect(server.commands.last).to match(/gauge time_value_test .* #{now.to_i}/)
+        wait do
+          expect(server.commands.last).to match(/gauge time_value_test .* #{now.to_i}/)
+        end
       end
 
       it "should report a time_ms as gauge and return the block result" do
@@ -139,8 +160,9 @@ shared_examples "Instrumental Agent" do
           1 + 1
         end
         expect(return_value).to eq(2)
-        wait
-        expect(server.commands.last).to match(/gauge time_value_test 1000/)
+        wait do
+          expect(server.commands.last).to match(/gauge time_value_test 1000/)
+        end
       end
 
       it "should return the value gauged" do
@@ -150,21 +172,24 @@ shared_examples "Instrumental Agent" do
 
       it "should report a gauge with a set time" do
         agent.gauge('gauge_test', 123, 555)
-        wait
-        expect(server.commands.last).to eq("gauge gauge_test 123 555 1")
+        wait do
+          expect(server.commands.last).to eq("gauge gauge_test 123 555 1")
+        end
       end
 
       it "should report a gauge with a set time and count" do
         agent.gauge('gauge_test', 123, 555, 111)
-        wait
-        expect(server.commands.last).to eq("gauge gauge_test 123 555 111")
+        wait do
+          expect(server.commands.last).to eq("gauge gauge_test 123 555 111")
+        end
       end
 
       it "should report an increment" do
         now = Time.now
         agent.increment("increment_test")
-        wait
-        expect(server.commands.last).to eq("increment increment_test 1 #{now.to_i} 1")
+        wait do
+          expect(server.commands.last).to eq("increment increment_test 1 #{now.to_i} 1")
+        end
       end
 
       it "should return the value incremented by" do
@@ -175,33 +200,43 @@ shared_examples "Instrumental Agent" do
       it "should report an increment a value" do
         now = Time.now
         agent.increment("increment_test", 2)
-        wait
-        expect(server.commands.last).to eq("increment increment_test 2 #{now.to_i} 1")
+        wait do
+          expect(server.commands.last).to eq("increment increment_test 2 #{now.to_i} 1")
+        end
       end
 
       it "should report an increment with a set time" do
         agent.increment('increment_test', 1, 555)
-        wait
-        expect(server.commands.last).to eq("increment increment_test 1 555 1")
+        wait do
+          expect(server.commands.last).to eq("increment increment_test 1 555 1")
+        end
       end
 
       it "should report an increment with a set time and count" do
         agent.increment('increment_test', 1, 555, 111)
-        wait
-        expect(server.commands.last).to eq("increment increment_test 1 555 111")
+        wait do
+          expect(server.commands.last).to eq("increment increment_test 1 555 111")
+        end
       end
 
-      it "should discard data that overflows the buffer" do
-        with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-          5.times do |i|
-            agent.increment('overflow_test', i + 1, 300)
+      context do
+        let(:listen) { false }
+        it "should discard data that overflows the buffer" do
+          with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+            allow(agent.logger).to receive(:debug)
+            expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 4 300 1")
+            expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 5 300 1")
+            5.times do |i|
+              agent.increment('overflow_test', i + 1, 300)
+            end
+            wait do
+              expect(server.commands).to include("increment overflow_test 1 300 1")
+              expect(server.commands).to include("increment overflow_test 2 300 1")
+              expect(server.commands).to include("increment overflow_test 3 300 1")
+              expect(server.commands).to_not include("increment overflow_test 4 300 1")
+              expect(server.commands).to_not include("increment overflow_test 5 300 1")
+            end
           end
-          wait
-          expect(server.commands).to include("increment overflow_test 1 300 1")
-          expect(server.commands).to include("increment overflow_test 2 300 1")
-          expect(server.commands).to include("increment overflow_test 3 300 1")
-          expect(server.commands).to_not include("increment overflow_test 4 300 1")
-          expect(server.commands).to_not include("increment overflow_test 5 300 1")
         end
       end
 
@@ -260,8 +295,9 @@ shared_examples "Instrumental Agent" do
       it "should never let an exception reach the user" do
         expect(agent).to receive(:send_command).twice { raise(Exception.new("Test Exception")) }
         expect(agent.increment('throws_exception', 2)).to eq(nil)
-        wait
-        expect(agent.increment('throws_exception', 234)).to eq(nil)
+        wait do
+          expect(agent.increment('throws_exception', 234)).to eq(nil)
+        end
       end
 
       it "should let exceptions in time bubble up" do
@@ -279,8 +315,9 @@ shared_examples "Instrumental Agent" do
       it "should track invalid metrics" do
         expect(agent.logger).to receive(:warn).with(/%%/)
         agent.increment(' %% .!#@$%^&*', 1, 1)
-        wait
-        expect(server.commands.join("\n")).to include("increment agent.invalid_metric")
+        wait do
+          expect(server.commands.join("\n")).to include("increment agent.invalid_metric")
+        end
       end
 
       it "should allow reasonable metric names" do
@@ -288,15 +325,17 @@ shared_examples "Instrumental Agent" do
         agent.increment('a.b')
         agent.increment('hello.world')
         agent.increment('ThisIsATest.Of.The.Emergency.Broadcast.System.12345')
-        wait
-        expect(server.commands.join("\n")).to_not include("increment agent.invalid_metric")
+        wait do
+          expect(server.commands.join("\n")).to_not include("increment agent.invalid_metric")
+        end
       end
 
       it "should track invalid values" do
         expect(agent.logger).to receive(:warn).with(/hello.*testington/)
         agent.increment('testington', 'hello')
-        wait
-        expect(server.commands.join("\n")).to include("increment agent.invalid_value")
+        wait do
+          expect(server.commands.join("\n")).to include("increment agent.invalid_value")
+        end
       end
 
       it "should allow reasonable values" do
@@ -308,21 +347,33 @@ shared_examples "Instrumental Agent" do
         agent.increment('a',  2.2)
         agent.increment('a',  333.333)
         agent.increment('a',  Float::EPSILON)
-        wait
-        expect(server.commands.join("\n")).to_not include("increment agent.invalid_value")
+        wait do
+          expect(server.commands.join("\n")).to_not include("increment agent.invalid_value")
+        end
       end
 
       it "should send notices to the server" do
+        Timecop.freeze
         tm = Time.now
         agent.notice("Test note", tm)
-        wait
-        expect(server.commands.join("\n")).to include("notice #{tm.to_i} 0 Test note")
+        wait do
+          expect(server.commands.join("\n")).to include("notice #{tm.to_i} 0 Test note")
+        end
       end
 
       it "should prevent a note w/ newline characters from being sent to the server" do
-        expect(agent.notice("Test note\n")).to eq(nil)
-        wait
-        expect(server.commands.join("\n")).to_not include("notice Test note")
+        expect(agent.notice("Test_bad_note\n")).to eq(nil)
+
+        # Send a note that make it through so we're sure the bad note would have
+        # arrived if it was going to.
+        Timecop.freeze
+        tm = Time.now
+        agent.notice("Test_good_note", tm)
+        wait do
+          expect(server.commands.join("\n")).to include("Test_good_note")
+        end
+
+        expect(server.commands.join("\n")).to_not include("Test_bad_note")
       end
 
       it "should allow outgoing metrics to be stopped" do
@@ -338,8 +389,9 @@ shared_examples "Instrumental Agent" do
 
         wait
         agent.increment("foo.baz", 1, tm)
-        wait
-        expect(server.commands.join("\n")).to include("increment foo.baz 1 #{tm.to_i}")
+        wait do
+          expect(server.commands.join("\n")).to include("increment foo.baz 1 #{tm.to_i}")
+        end
         expect(server.commands.join("\n")).to_not include("increment foo.bar 1 #{tm.to_i}")
       end
 
@@ -348,28 +400,33 @@ shared_examples "Instrumental Agent" do
         expect(agent.instance_variable_get(:@queue).size).to be > 0
         agent.flush
         expect(agent.instance_variable_get(:@queue).size).to eq(0)
-        wait
-        expect(server.commands.grep(/^gauge a /).size).to eq(100)
+        wait do
+          expect(server.commands.grep(/^gauge a /).size).to eq(100)
+        end
       end
 
       it "should no op on an empty flush" do
         agent.flush(true)
-        wait
-        expect(server.commands).to be_empty
+        wait do
+          expect(server.commands).to be_empty
+        end
       end
     end
 
     describe Instrumental::Agent, "connection problems" do
       it "should automatically reconnect on disconnect" do
-        agent.increment("reconnect_test", 1, 1234)
-        wait
+        agent.increment("reconnect_test1", 1, 1234)
+        wait do
+          expect(server.commands.grep(/reconnect_test1/).size).to eq(1)
+        end
         server.disconnect_all
         wait(1)
         agent.increment('reconnect_test', 1, 5678) # triggers reconnect
-        wait(1)
-        expect(server.connect_count).to eq(2)
-        # Ensure the last command sent has been received after the reconnect attempt
-        expect(server.commands.last).to eq("increment reconnect_test 1 5678 1")
+        wait do
+          expect(server.connect_count).to eq(2)
+          # Ensure the last command sent has been received after the reconnect attempt
+          expect(server.commands.last).to eq("increment reconnect_test 1 5678 1")
+        end
       end
 
       context 'not listening' do
@@ -423,43 +480,48 @@ shared_examples "Instrumental Agent" do
         it "should cancel the worker thread when the host has hung up" do
           # Start the background agent thread and let it send one metric successfully
           agent.gauge('connection_failure', 1, 1234)
-          wait
+          wait do
+            expect(server.commands.grep(/connection_failure/).size).to eq(1)
+          end
           # Stop the server
           server.stop
           wait
           # Send one metric to the stopped server
           agent.gauge('connection_failure', 1, 1234)
-          wait
           # The agent thread should have stopped running since the network write would
           # have failed. The queue will still contain the metric that has yet to be sent
-          expect(agent.send(:running?)).to eq(false)
+          wait do
+            expect(agent.send(:running?)).to eq(false)
+          end
           expect(agent.queue.size).to eq(1)
         end
 
         it "should restart the worker thread after hanging it up during an unreachable host event" do
           # Start the background agent thread and let it send one metric successfully
           agent.gauge('connection_failure', 1, 1234)
-          wait
+          wait do
+            expect(server.commands.grep(/connection_failure/).size).to eq(1)
+          end
           # Stop the server
           server.stop
           wait
           # Send one metric to the stopped server
           agent.gauge('connection_failure', 1, 1234)
-          wait
           # The agent thread should have stopped running since the network write would
           # have failed. The queue will still contain the metric that has yet to be sent
-          expect(agent.send(:running?)).to eq(false)
+          wait do
+            expect(agent.send(:running?)).to eq(false)
+          end
           expect(agent.queue.size).to eq(1)
-          wait
           # Start the server back up again
           server.listen
-          wait
           # Sending another metric should kickstart the background worker thread
           agent.gauge('connection_failure', 1, 1234)
-          wait
           # The agent should now be running the background thread, and the queue should be empty
-          expect(agent.send(:running?)).to eq(true)
-          expect(agent.queue.size).to eq(0)
+          wait do
+            expect(agent.send(:running?)).to eq(true)
+            expect(agent.queue.size).to eq(0)
+          end
         end
 
       end
@@ -522,7 +584,9 @@ shared_examples "Instrumental Agent" do
 
       it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
         agent.increment('foo', 1)
-        wait
+        wait do
+          expect(server.commands.grep(/foo/).size).to eq(1)
+        end
         expect(agent).to receive(:flush_socket) do
           r, w = IO.pipe
           Thread.new do # JRuby requires extra thread here according to e9bb707e
