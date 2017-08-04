@@ -2,7 +2,7 @@
 
 Instrumental is a [application monitoring platform](https://instrumentalapp.com) built for developers who want a better understanding of their production software. Powerful tools, like the [Instrumental Query Language](https://instrumentalapp.com/docs/query-language), combined with an exploration-focused interface allow you to get real answers to complex questions, in real-time.
 
-This agent supports custom metric monitoring for Ruby applications. It provides high-data reliability at high scale, without ever blocking your process or causing an exception. 
+This agent supports custom metric monitoring for Ruby applications. It provides high-data reliability at high scale, without ever blocking your process or causing an exception.
 
 ## Setup & Usage
 
@@ -94,6 +94,20 @@ If you plan on tracking metrics in Resque jobs, you will need to explicitly clea
 
 You're required to do this because Resque calls `exit!` when a worker has finished processing, which bypasses Ruby's `at_exit` hooks. The Instrumental Agent installs an `at_exit` hook to flush any pending metrics to the servers, but this hook is bypassed by the `exit!` call; any other code you rely that uses `exit!` should call `I.cleanup` to ensure any pending metrics are correctly sent to the server before exiting the process.
 
+## Automated Metric Collection
+
+v2.x+ of the Instrumental Agent introduced automated metric collection for your application by way of the [Metrician gem](https://github.com/Instrumental/metrician-ruby). You can read more about the metrics it collects in the [Instrumental documentation](https://instrumentalapp.com/docs/metrician/installation).
+
+### Upgrading from 1.x
+
+If you are upgrading from the pre-2.x version of instrumental and **do not** want automated metric collection, you can disable it by setting the following in your agent setup:
+
+```
+I = Instrumental::Agent.new('PROJECT_API_TOKEN',
+  :enabled => Rails.env.production?,
+  :metrician => false
+)
+```
 
 ## Troubleshooting & Help
 
