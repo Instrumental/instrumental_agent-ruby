@@ -1,3 +1,6 @@
+### 2.0.0.alpha [August 18, 2017]
+* Add automatic tracking of common application metrics
+
 ### 1.0.1 [July 12, 2016]
 * Make agent initialization threadsafe
 
