@@ -1,3 +1,6 @@
+### 2.0.0 [August 21, 2017]
+* Add automatic tracking of common application metrics, official release
+
 ### 2.0.0.alpha [August 18, 2017]
 * Add automatic tracking of common application metrics
 
