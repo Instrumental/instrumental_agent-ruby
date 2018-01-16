@@ -34,7 +34,7 @@ Capistrano::Configuration.instance.load do
       deploy_duration_in_seconds = end_at - start_at
       deployer                   = fetch(:deployer)
       agent_options              = { :synchronous => true }
-      agent_options[:collector]  = instrumental_host if fetch(:instrumental_host)
+      agent_options[:collector]  = fetch(:instrumental_host, false)
       agent                      = Instrumental::Agent.new(fetch(:instrumental_key), agent_options)
       message                    = fetch(:deploy_message, "#{deployer} deployed #{current_revision}")
 
