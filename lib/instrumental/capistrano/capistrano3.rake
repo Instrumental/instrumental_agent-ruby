@@ -42,7 +42,7 @@ namespace :instrumental do
     deploy_duration_in_seconds = end_at - start_at
     deployer                   = fetch(:deployer)
     agent_options              = { :synchronous => true }
-    agent_options[:collector]  = instrumental_host if fetch(:instrumental_host)
+    agent_options[:collector]  = instrumental_host if fetch(:instrumental_host, false)
     message                    = fetch(:deploy_message, "#{deployer} deployed #{fetch(:current_revision)}".strip)
 
     if fetch(:instrumental_key)
