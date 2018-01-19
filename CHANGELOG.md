@@ -1,3 +1,6 @@
+### 2.1.0 [January 19, 2018]
+* Add support for capistrano 3
+
 ### 2.0.0 [August 21, 2017]
 * Add automatic tracking of common application metrics, official release
 
