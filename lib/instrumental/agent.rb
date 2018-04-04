@@ -75,7 +75,6 @@ module Instrumental
       @synchronous     = !!options[:synchronous]
       @pid             = Process.pid
       @allow_reconnect = true
-      @certs           = certificates
       @dns_resolutions = 0
       @last_connect_at = 0
       @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
@@ -541,18 +540,5 @@ module Instrumental
     def allows_secure?
       defined?(OpenSSL)
     end
-
-    def certificates
-      if allows_secure?
-        base_dir = File.expand_path(File.join(File.dirname(__FILE__), "..", ".."))
-        %w{equifax geotrust rapidssl}.map do |name|
-          OpenSSL::X509::Certificate.new(File.open(File.join(base_dir, "certs", "#{name}.ca.pem")))
-        end
-      else
-        []
-      end
-    end
-
   end
-
 end
