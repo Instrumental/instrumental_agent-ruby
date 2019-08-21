@@ -469,15 +469,15 @@ module Instrumental
         else
           report_exception(err)
         end
+        if command_and_args
+          logger.debug "requeueing: #{command_and_args}"
+          @queue << command_and_args
+        end
         if allow_reconnect == false ||
            (command_options && command_options[:allow_reconnect] == false)
           logger.info "Not trying to reconnect"
           @failures = 0
           return
-        end
-        if command_and_args
-          logger.debug "requeueing: #{command_and_args}"
-          @queue << command_and_args
         end
         disconnect
         @failures += 1

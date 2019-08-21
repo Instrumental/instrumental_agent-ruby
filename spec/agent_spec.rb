@@ -228,16 +228,16 @@ shared_examples "Instrumental Agent" do
             allow(agent.logger).to receive(:debug)
             expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 4 300 1")
             expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 5 300 1")
-            5.times do |i|
-              agent.increment('overflow_test', i + 1, 300)
+            1.upto(5) do |i|
+              agent.increment('overflow_test', i, 300)
             end
-            wait do
-              expect(server.commands).to include("increment overflow_test 1 300 1")
-              expect(server.commands).to include("increment overflow_test 2 300 1")
-              expect(server.commands).to include("increment overflow_test 3 300 1")
-              expect(server.commands).to_not include("increment overflow_test 4 300 1")
-              expect(server.commands).to_not include("increment overflow_test 5 300 1")
-            end
+
+            wait
+            expect(agent.queue.size).to eq(3)
+            expect(agent.queue.pop.first).to start_with("increment overflow_test 1 300 1")
+            expect(agent.queue.pop.first).to start_with("increment overflow_test 2 300 1")
+            expect(agent.queue.pop.first).to start_with("increment overflow_test 3 300 1")
+            expect(agent.queue.size).to eq(0)
           end
         end
       end
