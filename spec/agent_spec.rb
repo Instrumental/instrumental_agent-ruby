@@ -527,7 +527,37 @@ shared_examples "Instrumental Agent" do
         end
 
         it "should restart the worker thread after hanging it up during a bad ssl handshake event" do
-          raise 1
+          # Start the background agent thread and let it send one metric successfully
+          agent.gauge('connection_failure', 1, 1234)
+          wait do
+            expect(server.commands.grep(/connection_failure/).size).to eq(1)
+          end
+          # Make the agent return the relevant exception on the next connection test
+          test_connection_fail = true
+          tc = agent.method(:test_connection)
+          allow(agent).to receive(:test_connection) do |*args, &block|
+            test_connection_fail ? raise(OpenSSL::SSL::SSLError.new) : tc.call(*args)
+          end
+
+          # Send one metric to the agent
+          agent.gauge('connection_failure', 1, 1234)
+          # The agent thread should have stopped running since the network write would
+          # have failed.
+          wait do
+            expect(agent.send(:running?)).to eq(false)
+          end
+          # should we requeue?
+          expect(agent.queue.size).to eq(0)
+          # allow the agent to behave normally
+          test_connection_fail = false
+          # Sending another metric should kickstart the background worker thread
+          agent.gauge('connection_failure', 1, 1234)
+          # The agent should now be running the background thread, and the queue should be empty
+          wait do
+            expect(agent.send(:running?)).to eq(true)
+            expect(agent.queue.size).to eq(0)
+            expect(server.commands.grep(/connection_failure/).size).to eq(2)
+          end
         end
 
         it "should accurately count failures so that backoff can work as intended" do
@@ -556,7 +586,6 @@ shared_examples "Instrumental Agent" do
           # let the loop proceed
           test_connection_fail = false
 
-          # The agent should now be running the background thread, and the queue should be empty
           wait do
             expect(agent.send(:running?)).to eq(true)
             expect(agent.queue.size).to eq(0)

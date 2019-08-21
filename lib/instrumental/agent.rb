@@ -459,10 +459,11 @@ module Instrumental
         case err
         when EOFError
         # nop
-        when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE, Timeout::Error
+        when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE, Timeout::Error, OpenSSL::SSL::SSLError
           # If the connection has been refused by Instrumental
           # or we cannot reach the server
           # or the connection state of this socket is in a race
+          # or SSL is not functioning properly for some reason
           logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
           logger.debug "Exception: #{err.inspect}\n#{err.backtrace.join("\n")}"
           allow_reconnect = false
