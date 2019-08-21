@@ -481,7 +481,7 @@ shared_examples "Instrumental Agent" do
       context 'server hangup' do
         it "should cancel the worker thread when the host has hung up" do
           # Start the background agent thread and let it send one metric successfully
-          agent.gauge('connection_failure', 1, 1234)
+          agent.gauge('connection_failure1', 1, 1234)
           wait do
             expect(server.commands.grep(/connection_failure/).size).to eq(1)
           end
@@ -489,7 +489,7 @@ shared_examples "Instrumental Agent" do
           server.stop
           wait
           # Send one metric to the stopped server
-          agent.gauge('connection_failure', 1, 1234)
+          agent.gauge('connection_failure2', 1, 1234)
           # The agent thread should have stopped running since the network write would
           # have failed. The queue will still contain the metric that has yet to be sent
           wait do
@@ -546,7 +546,7 @@ shared_examples "Instrumental Agent" do
           wait do
             expect(agent.send(:running?)).to eq(false)
           end
-          # should we requeue?
+          # The command is not in the queue
           expect(agent.queue.size).to eq(0)
           # allow the agent to behave normally
           test_connection_fail = false

@@ -411,10 +411,10 @@ module Instrumental
 
     def run_worker_loop
       @failures = 0
+      begin
+      logger.info "connecting to collector"
       command_and_args = nil
       command_options = nil
-      logger.info "connecting to collector"
-      begin
         with_timeout(CONNECT_TIMEOUT) do
           @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
         end
