@@ -349,23 +349,7 @@ module Instrumental
 
     def test_connection
       begin
-        # In the case where the socket is an OpenSSL::SSL::SSLSocket,
-        # on Ruby 1.8.6, 1.8.7 or 1.9.1, read_nonblock does not exist,
-        # and so the case of testing socket liveliness via a nonblocking
-        # read that catches a wait condition won't work.
-        #
-        # We grab the SSL socket's underlying IO object and perform the
-        # non blocking read there in order to ensure the socket is still
-        # valid
-        if @socket.respond_to?(:read_nonblock)
-          @socket.read_nonblock(1)
-        elsif @socket.respond_to?(:io)
-          # The SSL Socket may send down additional data at close time,
-          # so we perform two nonblocking reads, one to pull any pending
-          # data on the socket, and the second to actually perform the connection
-          # liveliness test
-          @socket.io.read_nonblock(1024) && @socket.io.read_nonblock(1024)
-        end
+        @socket.read_nonblock(1)
       rescue *wait_exceptions
         # noop
       end
