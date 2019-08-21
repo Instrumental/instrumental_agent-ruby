@@ -9,6 +9,8 @@ def wait(n=0.2, &block)
       if (Time.now - start) < 5
         sleep n
         retry
+      else
+        raise ex
       end
     end
   else
