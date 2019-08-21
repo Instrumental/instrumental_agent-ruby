@@ -4,13 +4,13 @@ require "instrumental/version"
 Gem::Specification.new do |s|
   s.name        = "instrumental_agent"
   s.version     = Instrumental::VERSION
-  s.authors     = ["Elijah Miller", "Christopher Zelenak", "Kristopher Chambers", "Matthew Hassfurder"]
+  s.authors     = ["Expected Behavior"]
   s.email       = ["support@instrumentalapp.com"]
   s.homepage    = "http://github.com/instrumental/instrumental_agent-ruby"
   s.summary     = %q{Custom metric monitoring for Ruby applications via Instrumental}
   s.description = %q{This agent supports Instrumental custom metric monitoring for Ruby applications. It provides high-data reliability at high scale, without ever blocking your process or causing an exception.}
   s.license     = "MIT"
-  s.required_ruby_version = '>= 2.0.0'
+  s.required_ruby_version = '>= 2.4.6'
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
