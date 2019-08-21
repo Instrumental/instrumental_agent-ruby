@@ -524,6 +524,42 @@ shared_examples "Instrumental Agent" do
           end
         end
 
+        it "should restart the worker thread after hanging it up during a bad ssl handshake event" do
+          raise 1
+        end
+
+        it "should accurately count failures so that backoff can work as intended" do
+          # Start the background agent thread and let it send one metric successfully
+          agent.gauge('connection_failure', 1, 1234)
+          wait do
+            expect(server.commands.grep(/connection_failure/).size).to eq(1)
+          end
+
+          # configure test_connection to fail in a way that won't kill the inner loop
+          test_connection_fail = true
+          tc = agent.method(:test_connection)
+          allow(agent).to receive(:test_connection) do |*args, &block|
+            test_connection_fail ? raise("test_connection_fail") : tc.call(*args)
+          end
+
+          # send some metrics
+          agent.gauge('connection_failure_1', 1, 1234)
+          agent.gauge('connection_failure_2', 1, 1234)
+          agent.gauge('connection_failure_3', 1, 1234)
+          wait do
+            expect(agent.instance_variable_get(:@failures)).to be > 0
+            expect(agent.queue.size).to be > 0
+          end
+
+          # let the loop proceed
+          test_connection_fail = false
+
+          # The agent should now be running the background thread, and the queue should be empty
+          wait do
+            expect(agent.send(:running?)).to eq(true)
+            expect(agent.queue.size).to eq(0)
+          end
+        end
       end
 
 

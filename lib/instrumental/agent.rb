@@ -270,7 +270,7 @@ module Instrumental
     end
 
     def report_exception(e)
-      logger.error "Exception occurred: #{e.message}\n#{e.backtrace.join("\n")}"
+      logger.error "Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
     end
 
     def ipv4_address_for_host(host, port, moment_to_connect = Time.now.to_i)
@@ -410,81 +410,84 @@ module Instrumental
     end
 
     def run_worker_loop
+      @failures = 0
       command_and_args = nil
       command_options = nil
       logger.info "connecting to collector"
-      with_timeout(CONNECT_TIMEOUT) do
-        @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
-      end
-      logger.info "connected to collector at #{host}:#{port}"
-      hello_options = {
-        "version" => "ruby/instrumental_agent/#{VERSION}",
-        "hostname" => HOSTNAME,
-        "pid" => Process.pid,
-        "runtime" => "#{defined?(RUBY_ENGINE) ? RUBY_ENGINE : "ruby"}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
-        "platform" => RUBY_PLATFORM
-      }.to_a.flatten.map { |v| v.to_s.gsub(/\s+/, "_") }.join(" ")
+      begin
+        with_timeout(CONNECT_TIMEOUT) do
+          @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
+        end
+        logger.info "connected to collector at #{host}:#{port}"
+        hello_options = {
+          "version" => "ruby/instrumental_agent/#{VERSION}",
+          "hostname" => HOSTNAME,
+          "pid" => Process.pid,
+          "runtime" => "#{defined?(RUBY_ENGINE) ? RUBY_ENGINE : "ruby"}/#{RUBY_VERSION}p#{RUBY_PATCHLEVEL}",
+          "platform" => RUBY_PLATFORM
+        }.to_a.flatten.map { |v| v.to_s.gsub(/\s+/, "_") }.join(" ")
 
-      send_with_reply_timeout "hello #{hello_options}"
-      send_with_reply_timeout "authenticate #{@api_key}"
-      @failures = 0
-      loop do
-        command_and_args, command_options = @queue.pop
-        if command_and_args
-          sync_resource = command_options && command_options[:sync_resource]
-          test_connection
-          case command_and_args
-          when 'exit'
-            logger.info "Exiting, #{@queue.size} commands remain"
-            return true
-          when 'flush'
-            release_resource = true
-          else
-            logger.debug "Sending: #{command_and_args.chomp}"
-            @socket.puts command_and_args
-          end
-          command_and_args = nil
-          command_options = nil
-          if sync_resource
-            @sync_mutex.synchronize do
-              sync_resource.signal
+        send_with_reply_timeout "hello #{hello_options}"
+        send_with_reply_timeout "authenticate #{@api_key}"
+
+        loop do
+          command_and_args, command_options = @queue.pop
+          if command_and_args
+            sync_resource = command_options && command_options[:sync_resource]
+            test_connection
+            case command_and_args
+            when 'exit'
+              logger.info "Exiting, #{@queue.size} commands remain"
+              return true
+            when 'flush'
+              release_resource = true
+            else
+              logger.debug "Sending: #{command_and_args.chomp}"
+              @socket.puts command_and_args
+            end
+            command_and_args = nil
+            command_options = nil
+            if sync_resource
+              @sync_mutex.synchronize do
+                sync_resource.signal
+              end
             end
           end
         end
-      end
-    rescue Exception => err
-      allow_reconnect = @allow_reconnect
-      case err
-      when EOFError
+      rescue Exception => err
+        allow_reconnect = @allow_reconnect
+        case err
+        when EOFError
         # nop
-      when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE, Timeout::Error
-        # If the connection has been refused by Instrumental
-        # or we cannot reach the server
-        # or the connection state of this socket is in a race
-        logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
-        logger.debug "Exception: #{err.inspect}\n#{err.backtrace.join("\n")}"
-        allow_reconnect = false
-      else
-        report_exception(err)
+        when Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::EADDRINUSE, Timeout::Error
+          # If the connection has been refused by Instrumental
+          # or we cannot reach the server
+          # or the connection state of this socket is in a race
+          logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
+          logger.debug "Exception: #{err.inspect}\n#{err.backtrace.join("\n")}"
+          allow_reconnect = false
+        else
+          report_exception(err)
+        end
+        if allow_reconnect == false ||
+           (command_options && command_options[:allow_reconnect] == false)
+          logger.info "Not trying to reconnect"
+          @failures = 0
+          return
+        end
+        if command_and_args
+          logger.debug "requeueing: #{command_and_args}"
+          @queue << command_and_args
+        end
+        disconnect
+        @failures += 1
+        delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
+        logger.error "disconnected, #{@failures} failures in a row, reconnect in #{delay}..."
+        sleep delay
+        retry
+      ensure
+        disconnect
       end
-      if allow_reconnect == false ||
-        (command_options && command_options[:allow_reconnect] == false)
-        logger.info "Not trying to reconnect"
-        @failures = 0
-        return
-      end
-      if command_and_args
-        logger.debug "requeueing: #{command_and_args}"
-        @queue << command_and_args
-      end
-      disconnect
-      @failures += 1
-      delay = [(@failures - 1) ** BACKOFF, MAX_RECONNECT_DELAY].min
-      logger.error "disconnected, #{@failures} failures in a row, reconnect in #{delay}..."
-      sleep delay
-      retry
-    ensure
-      disconnect
     end
 
     def setup_cleanup_at_exit
