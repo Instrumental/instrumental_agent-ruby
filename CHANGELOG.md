@@ -1,3 +1,9 @@
+### 3.0.0.alpha [August 22, 2019]
+* Drop support for outdated versions of Ruby
+* Explicitly add support for new versions of Ruby
+* Better handling of SSL errors when connecting to Instrumental
+* Note: the agent API has NOT changed.  This is a major release because of the significant changes in Ruby versions officially supported.
+
 ### 2.1.0 [January 19, 2018]
 * Add support for capistrano 3
 
