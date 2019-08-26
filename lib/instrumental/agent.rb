@@ -350,6 +350,7 @@ module Instrumental
     def test_connection
       begin
         @socket.read_nonblock(1)
+        @failures = 0
       rescue *wait_exceptions
         # noop
       end
