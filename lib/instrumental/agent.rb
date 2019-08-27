@@ -352,7 +352,10 @@ module Instrumental
         @socket.read_nonblock(1)
         @failures = 0
       rescue *wait_exceptions
-        # noop
+        # no-op
+        @logger.error "test connection failed with a wait exception in #{Process.pid}"
+      rescue Exception => e
+        @logger.error "test connection failed with an unknown exception #{e.class} in #{Process.pid}"
       end
     end
 
