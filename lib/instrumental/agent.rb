@@ -22,7 +22,7 @@ module Instrumental
     RESOLVE_TIMEOUT                    = 1
 
 
-    attr_accessor :host, :port, :synchronous, :queue, :dns_resolutions, :last_connect_at
+    attr_accessor :host, :port, :synchronous, :sender_queue, :dns_resolutions, :last_connect_at
     attr_reader :connection, :enabled, :secure
 
     def self.logger=(l)
@@ -52,6 +52,7 @@ module Instrumental
       # port:        8001
       # enabled:     true
       # synchronous: false
+      # frequency:   6
       # secure:      true
       # verify:      true
       @api_key         = api_key
@@ -73,13 +74,14 @@ module Instrumental
       @port            = (@port || default_port).to_i
       @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous     = !!options[:synchronous]
+      @frequency       = options.has_key?(:frequency) ? options[:frequency].to_f : 6.0
       @pid             = Process.pid
       @allow_reconnect = true
       @dns_resolutions = 0
       @last_connect_at = 0
       @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
       @start_worker_mutex = Mutex.new
-      @queue = Queue.new
+      @sender_queue = Queue.new
 
       setup_cleanup_at_exit if @enabled
 
@@ -93,7 +95,7 @@ module Instrumental
     #  agent.gauge('load', 1.23)
     def gauge(metric, value, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-          send_command("gauge", metric, value, time.to_i, count.to_i)
+         send_command(InstrumentalCommand.new("gauge".freeze, metric, value, time.to_i, count.to_i))
         value
       else
         nil
@@ -141,7 +143,7 @@ module Instrumental
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-          send_command("increment", metric, value, time.to_i, count.to_i)
+         send_command(InstrumentalCommand.new("increment".freeze, metric, value, time.to_i, count.to_i))
         value
       else
         nil
@@ -156,7 +158,7 @@ module Instrumental
     #  agent.notice('A notice')
     def notice(note, time = Time.now, duration = 0)
       if valid_note?(note)
-        send_command("notice", time.to_i, duration.to_i, note)
+        send_command(InstrumentalNotice.new(note, time.to_i, duration.to_i))
         note
       else
         nil
@@ -210,8 +212,8 @@ module Instrumental
         @thread.kill
         @thread = nil
       end
-      if @queue
-        @queue.clear
+      if @sender_queue
+        @sender_queue.clear
       end
     end
 
@@ -221,15 +223,15 @@ module Instrumental
     # where at_exit is bypassed like Resque workers.
     def cleanup
       if running?
-        logger.info "Cleaning up agent, queue size: #{@queue.size}, thread running: #{@thread.alive?}"
+        logger.info "Cleaning up agent, queue size: #{@sender_queue.size}, thread running: #{@thread.alive?}"
         @allow_reconnect = false
-        if @queue.size > 0
+        if @sender_queue.size > 0
           queue_message('exit')
           begin
             with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
           rescue Timeout::Error
-            if @queue.size > 0
-              logger.error "Timed out working agent thread on exit, dropping #{@queue.size} metrics"
+            if @sender_queue.size > 0
+              logger.error "Timed out working agent thread on exit, dropping #{@sender_queue.size} metrics"
             else
               logger.error "Timed out Instrumental Agent, exiting"
             end
@@ -270,6 +272,7 @@ module Instrumental
     end
 
     def report_exception(e)
+#      puts "Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
       logger.error "Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
     end
 
@@ -290,44 +293,39 @@ module Instrumental
       nil
     end
 
-    def send_command(cmd, *args)
-      cmd = "%s %s\n" % [cmd, args.collect { |a| a.to_s }.join(" ")]
-      if enabled?
-
-        start_connection_worker
-        if @queue && @queue.size < MAX_BUFFER
-          @queue_full_warning = false
-          logger.debug "Queueing: #{cmd.chomp}"
-          queue_message(cmd, { :synchronous => @synchronous })
-        else
-          if !@queue_full_warning
-            @queue_full_warning = true
-            logger.warn "Queue full(#{@queue.size}), dropping commands..."
-          end
-          logger.debug "Dropping command, queue full(#{@queue.size}): #{cmd.chomp}"
-          nil
-        end
+    def send_command(command)
+      return logger.debug(command.to_s) unless enabled?
+      
+      start_workers
+      if @sender_queue && @sender_queue.size < MAX_BUFFER
+        @queue_full_warning = false
+        logger.debug "Queueing: #{command.to_s}"
+        queue_message(command.to_s, { :synchronous => @synchronous })
       else
-        logger.debug cmd.strip
+        if !@queue_full_warning
+          @queue_full_warning = true
+          logger.warn "Queue full(#{@sender_queue.size}), dropping commands..."
+        end
+        logger.debug "Dropping command, queue full(#{@sender_queue.size}): #{command.to_s}"
+        nil
       end
     end
 
     def queue_message(message, options = {})
-      if @enabled
-        options ||= {}
-        if options[:allow_reconnect].nil?
-          options[:allow_reconnect] = @allow_reconnect
-        end
-        synchronous = options.delete(:synchronous)
-        if synchronous
-          options[:sync_resource] ||= ConditionVariable.new
-          @sync_mutex.synchronize {
-            @queue << [message, options]
-            options[:sync_resource].wait(@sync_mutex)
-          }
-        else
-          @queue << [message, options]
-        end
+      return message unless enabled?
+
+      # imagine it's a reverse merge, but with less allocations
+      options[:allow_reconnect] = @allow_reconnect unless options.has_key?(:allow_reconnect)
+
+      if options.delete(:synchronous)
+        options[:sync_resource] ||= ConditionVariable.new
+        @sync_mutex.synchronize {
+          @sender_queue << [message, options]
+          options[:sync_resource].wait(@sync_mutex)
+        }
+      else
+        # TODO not the sender if we are aggregating
+        @sender_queue << [message, options]
       end
       message
     end
@@ -355,7 +353,12 @@ module Instrumental
       end
     end
 
-    def start_connection_worker
+    def start_workers
+      start_sender_worker
+      #start_aggregator_worker
+    end
+
+    def start_sender_worker
       # NOTE: We need a mutex around both `running?` and thread creation,
       # otherwise we could create two threads.
       # Return early and queue the message if another thread is
@@ -373,7 +376,7 @@ module Instrumental
           @sockaddr_in = Socket.pack_sockaddr_in(@port, address)
           logger.info "Starting thread"
           @thread = Thread.new do
-            run_worker_loop
+            run_sender_loop
           end
         end
       ensure
@@ -409,7 +412,7 @@ module Instrumental
       sock
     end
 
-    def run_worker_loop
+    def run_sender_loop
       @failures = 0
       begin
       logger.info "connecting to collector"
@@ -431,13 +434,13 @@ module Instrumental
         send_with_reply_timeout "authenticate #{@api_key}"
 
         loop do
-          command_and_args, command_options = @queue.pop
+          command_and_args, command_options = @sender_queue.pop
           if command_and_args
             sync_resource = command_options && command_options[:sync_resource]
             test_connection
             case command_and_args
             when 'exit'
-              logger.info "Exiting, #{@queue.size} commands remain"
+              logger.info "Exiting, #{@sender_queue.size} commands remain"
               return true
             when 'flush'
               release_resource = true
@@ -464,7 +467,7 @@ module Instrumental
           # or we cannot reach the server
           # or the connection state of this socket is in a race
           # or SSL is not functioning properly for some reason
-          logger.error "unable to connect to Instrumental, hanging up with #{@queue.size} messages remaining"
+          logger.error "unable to connect to Instrumental, hanging up with #{@sender_queue.size} messages remaining"
           logger.debug "Exception: #{err.inspect}\n#{err.backtrace.join("\n")}"
           allow_reconnect = false
         else
@@ -478,7 +481,7 @@ module Instrumental
         end
         if command_and_args
           logger.debug "requeueing: #{command_and_args}"
-          @queue << command_and_args
+          @sender_queue << command_and_args
         end
         disconnect
         @failures += 1
@@ -527,6 +530,18 @@ module Instrumental
 
     def allows_secure?
       defined?(OpenSSL)
+    end
+  end
+
+  InstrumentalCommand = Struct.new(:command, :metric, :value, :time, :count) do
+    def to_s
+      [command, metric, value, time, count].map(&:to_s).join(" ")
+    end
+  end
+
+  InstrumentalNotice = Struct.new(:note, :time, :duration) do
+    def to_s
+      ["notice".freeze, time, duration, note].map(&:to_s).join(" ")
     end
   end
 end

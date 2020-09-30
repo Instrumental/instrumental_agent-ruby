@@ -39,7 +39,8 @@ shared_examples "Instrumental Agent" do
     let(:token)        { 'test_token' }
     let(:address)      { server.host_and_port }
     let(:metrician)    { false }
-    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?, :metrician => metrician) }
+    let(:frequency)    { nil }
+    let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?, :metrician => metrician, :frequency => frequency) }
 
     # Server options
     let(:listen)       { true }
@@ -233,11 +234,11 @@ shared_examples "Instrumental Agent" do
             end
 
             wait
-            expect(agent.queue.size).to eq(3)
-            expect(agent.queue.pop.first).to start_with("increment overflow_test 1 300 1")
-            expect(agent.queue.pop.first).to start_with("increment overflow_test 2 300 1")
-            expect(agent.queue.pop.first).to start_with("increment overflow_test 3 300 1")
-            expect(agent.queue.size).to eq(0)
+            expect(agent.sender_queue.size).to eq(3)
+            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 1 300 1")
+            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 2 300 1")
+            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 3 300 1")
+            expect(agent.sender_queue.size).to eq(0)
           end
         end
       end
@@ -248,7 +249,7 @@ shared_examples "Instrumental Agent" do
           5.times do |i|
             agent.increment('overflow_test', i + 1, 300)
           end
-          expect(agent.instance_variable_get(:@queue).size).to eq(0)
+          expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
           wait # let the server receive the commands
           expect(server.commands).to include("increment overflow_test 1 300 1")
           expect(server.commands).to include("increment overflow_test 2 300 1")
@@ -281,17 +282,17 @@ shared_examples "Instrumental Agent" do
           sleep 1
         }
 
-        run_worker_loop_calls = 0
-        allow(agent).to receive(:run_worker_loop) {
-          run_worker_loop_calls += 1
+        run_sender_loop_calls = 0
+        allow(agent).to receive(:run_sender_loop) {
+          run_sender_loop_calls += 1
           sleep 3 # keep the worker thread alive
         }
 
         t = Thread.new { agent.increment("race") }
         agent.increment("race")
         wait(2)
-        expect(run_worker_loop_calls).to eq(1)
-        expect(agent.queue.size).to eq(2)
+        expect(run_sender_loop_calls).to eq(1)
+        expect(agent.sender_queue.size).to eq(2)
       end
 
       it "should never let an exception reach the user" do
@@ -399,9 +400,9 @@ shared_examples "Instrumental Agent" do
 
       it "should allow flushing pending values to the server" do
         1.upto(100) { agent.gauge('a', rand(50)) }
-        expect(agent.instance_variable_get(:@queue).size).to be > 0
+        expect(agent.instance_variable_get(:@sender_queue).size).to be > 0
         agent.flush
-        expect(agent.instance_variable_get(:@queue).size).to eq(0)
+        expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
         wait do
           expect(server.commands.grep(/^gauge a /).size).to eq(100)
         end
@@ -439,7 +440,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # The agent should not have sent the metric yet, the server is not responding
-          expect(agent.queue.pop(true)).to include("increment reconnect_test 1 1234 1\n")
+          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
         end
 
         it "should warn once when buffer is full" do
@@ -474,7 +475,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # Since server hasn't responded to hello or authenticate, worker thread will not send data
-          expect(agent.queue.pop(true)).to include("increment reconnect_test 1 1234 1\n")
+          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
         end
       end
 
@@ -495,7 +496,7 @@ shared_examples "Instrumental Agent" do
           wait do
             expect(agent.send(:running?)).to eq(false)
           end
-          expect(agent.queue.size).to eq(1)
+          expect(agent.sender_queue.size).to eq(1)
         end
 
         it "should restart the worker thread after hanging it up during an unreachable host event" do
@@ -514,7 +515,7 @@ shared_examples "Instrumental Agent" do
           wait do
             expect(agent.send(:running?)).to eq(false)
           end
-          expect(agent.queue.size).to eq(1)
+          expect(agent.sender_queue.size).to eq(1)
           # Start the server back up again
           server.listen
           # Sending another metric should kickstart the background worker thread
@@ -522,7 +523,7 @@ shared_examples "Instrumental Agent" do
           # The agent should now be running the background thread, and the queue should be empty
           wait do
             expect(agent.send(:running?)).to eq(true)
-            expect(agent.queue.size).to eq(0)
+            expect(agent.sender_queue.size).to eq(0)
           end
         end
 
@@ -547,7 +548,7 @@ shared_examples "Instrumental Agent" do
             expect(agent.send(:running?)).to eq(false)
           end
           # The command is not in the queue
-          expect(agent.queue.size).to eq(0)
+          expect(agent.sender_queue.size).to eq(0)
           # allow the agent to behave normally
           test_connection_fail = false
           # Sending another metric should kickstart the background worker thread
@@ -555,7 +556,7 @@ shared_examples "Instrumental Agent" do
           # The agent should now be running the background thread, and the queue should be empty
           wait do
             expect(agent.send(:running?)).to eq(true)
-            expect(agent.queue.size).to eq(0)
+            expect(agent.sender_queue.size).to eq(0)
             expect(server.commands.grep(/connection_failure/).size).to eq(2)
           end
         end
@@ -580,7 +581,7 @@ shared_examples "Instrumental Agent" do
           agent.gauge('connection_failure_3', 1, 1234)
           wait do
             expect(agent.instance_variable_get(:@failures)).to be > 0
-            expect(agent.queue.size).to be > 0
+            expect(agent.sender_queue.size).to be > 0
           end
 
           # let the loop proceed
@@ -588,11 +589,10 @@ shared_examples "Instrumental Agent" do
 
           wait do
             expect(agent.send(:running?)).to eq(true)
-            expect(agent.queue.size).to eq(0)
+            expect(agent.sender_queue.size).to eq(0)
           end
         end
       end
-
 
       context 'not authenticating' do
         # Server will fail all authentication attempts
@@ -602,7 +602,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # Metrics should not have been sent since all authentication failed
-          expect(agent.queue.pop(true)).to include("increment reconnect_test 1 1234 1\n")
+          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
         end
       end
 
@@ -639,7 +639,7 @@ shared_examples "Instrumental Agent" do
         it "should not wait to exit a process if there are no commands queued" do
           allow(agent).to receive(:open_socket) { |*args, &block| sleep(5) && block.call }
           with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
-            if (pid = fork { agent.increment('foo', 1); agent.queue.clear })
+            if (pid = fork { agent.increment('foo', 1); agent.sender_queue.clear })
               tm = Time.now.to_f
               Process.wait(pid)
               diff = Time.now.to_f - tm
@@ -725,7 +725,7 @@ shared_examples "Instrumental Agent" do
           expect(agent.send(:running?)).to eq(true)
 
           # Setup a failure for the next command so we'll break out of the inner
-          # loop in run_worker_loop causing another call to open_socket
+          # loop in run_sender_loop causing another call to open_socket
           test_connection_fail = true
           tc = agent.method(:test_connection)
           allow(agent).to receive(:test_connection) { |*args, &block| test_connection_fail ? raise("fail") : tc.call(*args) }
@@ -799,6 +799,30 @@ shared_examples "Instrumental Agent" do
         it "can be disbaled" do
           expect(Metrician).to_not receive(:activate)
           agent = Instrumental::Agent.new('test-token', :metrician => false)
+        end
+      end
+    end
+
+    describe Instrumental::Agent, "aggregation" do
+      context "aggregation enabled" do
+        let(:frequency) { 6 }
+
+        it "can be enabled at Agent.new time"
+
+        it "can be enabled by setting the agent frequency"
+
+        it "is enabled by default"
+
+        it "can be disabled by setting frequency to nil"
+
+        it "can be disabled by setting frequency to 0"
+        
+        xit "should not be enabled at the same time as synchronous" do
+          agent = Instrumental::Agent.new('test-token', :synchronous => true, :frequency => 6)
+          expect(agent.synchronous).to eq(true)
+          expect(agent.frequency).to eq(0)
+          allow(agent.logger).to receive(:warn)
+          expect(agent.logger).to receive(:warn).with("Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode")
         end
       end
     end
