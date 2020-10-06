@@ -1,4 +1,6 @@
 module Instrumental
+  METRIC_TYPES = ["increment".freeze, "gauge".freeze].freeze
+  
   Command = Struct.new(:command, :metric, :value, :time, :count) do
     def initialize(*args)
       super(*args)
@@ -18,7 +20,7 @@ module Instrumental
       raise ArgumentError.new("Commands can only be added to other commands") unless other_command.is_a?(Command)
 
       unless metadata == other_command.metadata
-        raise ArgumentError.new("Commandsmust have matching command, metric, and time to be added together")
+        raise ArgumentError.new("Commands must have matching command, metric, and time to be added together")
       end
 
       Command.new(command, metric, value + other_command.value, time, count + other_command.count)
