@@ -59,6 +59,17 @@ User.find_each do |user|
 end
 ```
 
+## Aggregation
+Aggregation collects more data on your system before sending it to Instrumental. This reduces the total amount of data being sent, at the cost of a small amount of additional latency. You can control this feature with the frequency parameter:
+
+```ruby
+I = Instrumental::Agent.new('PROJECT_API_TOKEN', :frequency => 15) # send data every 15 seconds
+I.frequency = 6 # send batches of data every 6 seconds
+```
+
+The agent may send data more frequently if you are sending a large number of different metrics. Values between 3 and 15 are generally reasonable. If you want to disable this behavior and send every metric as fast as possible, set frequency to zero or nil. Note that a frequency of zero will still use a seperate thread for performance - it is NOT the same as synchronous mode.
+
+
 ## Server Metrics
 
 Want server stats like load, memory, etc.? Check out [InstrumentalD](https://github.com/instrumental/instrumentald).
