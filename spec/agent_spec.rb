@@ -39,7 +39,7 @@ shared_examples "Instrumental Agent" do
     let(:token)        { 'test_token' }
     let(:address)      { server.host_and_port }
     let(:metrician)    { false }
-    let(:frequency)    { nil }
+    let(:frequency)    { 0 }
     let(:agent)        { Instrumental::Agent.new(token, :collector => address, :synchronous => synchronous, :enabled => enabled, :secure => secure?, :verify_cert => verify_cert?, :metrician => metrician, :frequency => frequency) }
 
     # Server options
@@ -235,9 +235,9 @@ shared_examples "Instrumental Agent" do
 
             wait
             expect(agent.sender_queue.size).to eq(3)
-            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 1 300 1")
-            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 2 300 1")
-            expect(agent.sender_queue.pop.first).to start_with("increment overflow_test 3 300 1")
+            expect(agent.sender_queue.pop.first.to_s).to start_with("increment overflow_test 1 300 1")
+            expect(agent.sender_queue.pop.first.to_s).to start_with("increment overflow_test 2 300 1")
+            expect(agent.sender_queue.pop.first.to_s).to start_with("increment overflow_test 3 300 1")
             expect(agent.sender_queue.size).to eq(0)
           end
         end
@@ -265,8 +265,10 @@ shared_examples "Instrumental Agent" do
           fork do
             agent.increment('fork_reconnect_test', 1, 3) # triggers reconnect
           end
+
           wait(1)
           agent.increment('fork_reconnect_test', 1, 4) # triggers reconnect
+
           wait(1)
           expect(server.connect_count).to eq(2)
 
@@ -440,7 +442,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # The agent should not have sent the metric yet, the server is not responding
-          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
+          expect(agent.sender_queue.pop(true).first.to_s).to eq("increment reconnect_test 1 1234 1")
         end
 
         it "should warn once when buffer is full" do
@@ -475,7 +477,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # Since server hasn't responded to hello or authenticate, worker thread will not send data
-          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
+          expect(agent.sender_queue.pop(true).first.to_s).to eq("increment reconnect_test 1 1234 1")
         end
       end
 
@@ -602,7 +604,7 @@ shared_examples "Instrumental Agent" do
           agent.increment('reconnect_test', 1, 1234)
           wait
           # Metrics should not have been sent since all authentication failed
-          expect(agent.sender_queue.pop(true)).to include("increment reconnect_test 1 1234 1")
+          expect(agent.sender_queue.pop(true).first.to_s).to eq("increment reconnect_test 1 1234 1")
         end
       end
 
@@ -807,23 +809,152 @@ shared_examples "Instrumental Agent" do
       context "aggregation enabled" do
         let(:frequency) { 6 }
 
-        it "can be enabled at Agent.new time"
+        it "can be enabled at Agent.new time" do
+          expect(agent.frequency).to eq(6.0)
+        end
 
-        it "can be enabled by setting the agent frequency"
+        it "can be modified by setting the agent frequency" do
+          agent.frequency = 15
+          expect(agent.frequency).to eq(15.0)
+        end
 
-        it "is enabled by default"
+        it "is enabled by default" do
+          agent = Instrumental::Agent.new('test_token')
+          expect(agent.frequency.to_f).not_to eq(0.0)
+        end
 
-        it "can be disabled by setting frequency to nil"
+        it "should only allow frequencies that align with minutes" do
+          (1..100).each do |freq|
+            if 60 % freq == 0
+              expect(Instrumental::Agent.new('test_token', :frequency => freq).frequency).to eq(freq)
+              expect(Instrumental::Agent::VALID_FREQUENCIES).to include(freq)
+            else
+              expect{ Instrumental::Agent.new('test_token', :frequency => freq) }.to raise_error(ArgumentError)
+            end
+          end
+        end
 
-        it "can be disabled by setting frequency to 0"
+        it "bypasses aggregator queue entirely for most commands when frequency == 0" do
+          agent.frequency = 10 # this is red - 0 for green
+          expect(EventAggregator).not_to receive(:new)
+          agent.increment('a_metric')
+        end
+
+        it "adds data to the event aggregator and does not immediately send it" do
+          agent.increment('test')
+          wait do
+            expect(agent.instance_variable_get(:@event_aggregator).size).to eq(1)
+            expect(agent.instance_variable_get(:@event_aggregator).values.values.first.metric).to eq('test')
+          end
+        end
         
-        xit "should not be enabled at the same time as synchronous" do
-          agent = Instrumental::Agent.new('test-token', :synchronous => true, :frequency => 6)
+        it "batches data before sending" do
+          Timecop.freeze do
+            agent.increment('a_metric')
+            agent.increment('a_metric')
+            agent.increment('another_metric')
+          end
+          agent.flush(true)
+          wait do
+            expect(server.commands.grep(/_metric/).size).to eq(2)
+            aggregated_metric = server.commands.grep(/a_metric/).first.split(" ")
+            expect(aggregated_metric[2].to_i).to eq(2) # value
+            expect(aggregated_metric[4].to_i).to eq(2) # count            
+          end
+        end
+
+        it "flushes data from both queues before sending" do
+          Timecop.freeze do
+            100.times do |i|
+              agent.increment("test_metric_#{i}")
+              agent.increment("other_metric")
+            end
+          end
+
+          expect(agent.instance_variable_get(:@aggregator_queue).size).to be > 0
+          agent.flush
+          expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
+          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+
+          wait do          
+            expect(server.commands.grep(/test_metric/).size).to eq(100)
+            expect(server.commands.grep(/other_metric/).size).to eq(1)
+          end
+        end
+
+        it "does not batch notices" do
+          agent.frequency = 60
+          agent.notice "things are happening", 0, 100
+          agent.notice "things are happening", 0, 100
+          agent.notice "things are happening", 0, 100
+          wait(1) do
+            expect(server.commands.grep(/things are happening/).size).to eq(3)
+          end
+        end
+
+        it "can be disabled by setting frequency to nil" do
+          agent.frequency = nil
+          expect(EventAggregator).not_to receive(:new)
+          agent.increment('metric')
+          wait(1) do
+            expect(server.commands.grep(/metric/).size).to eq(1)
+          end
+        end
+        
+        it "can be disabled by setting frequency to 0" do
+          agent.frequency = 0
+          expect(EventAggregator).not_to receive(:new)
+          agent.increment('metric')
+          wait(1) do
+            expect(server.commands.grep(/metric/).size).to eq(1)
+          end
+        end
+
+        it "can take strings as frequency" do
+          agent = Instrumental::Agent.new('test_token', :frequency => "15")
+          expect(agent.frequency).to eq(15)
+        end
+        
+        it "should not be enabled at the same time as synchronous" do
+          expect(Instrumental::Agent.logger).to receive(:warn).with(/Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode./)
+          agent = Instrumental::Agent.new('test_token', :synchronous => true, :frequency => 6)
           expect(agent.synchronous).to eq(true)
           expect(agent.frequency).to eq(0)
-          allow(agent.logger).to receive(:warn)
-          expect(agent.logger).to receive(:warn).with("Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode")
         end
+
+        it "should use synchronous mode if it is enabled, even if turned on after frequency set at start" do
+          agent.increment('metric')
+          agent.increment('metric')
+          agent.synchronous = true
+          agent.increment('metric')
+          wait(1) do
+            expect(server.commands.grep(/metric 1/).size).to eq(1)
+          end
+          agent.flush
+          wait(1) do
+            expect(server.commands.grep(/metric 1/).size).to eq(1)
+            expect(server.commands.grep(/metric 2/).size).to eq(1)
+          end
+        end
+
+        it "sends aggregated metrics after specified frequency, even if no flush is sent" do
+          frequency = 3
+          agent.increment('metric')
+          agent.increment('metric')
+          agent.gauge('other', 1)
+          agent.gauge('other', 1)
+          agent.gauge('other', 1)
+          wait(1)
+          expect(server.commands.grep(/metric/).size).to eq(0)
+          wait(3)
+          expect(server.commands.grep(/metric 2/).size).to eq(1)
+          expect(server.commands.grep(/other 3/).size).to eq(1)
+        end
+
+        it "will overflow if the aggregator queue is full"
+        it "will not pop off the aggregator queue if the aggregator is too large"
+        it "will not send aggregators to the sender queue if it has an item and the sender thread is not waiting"
+        
       end
     end
   end

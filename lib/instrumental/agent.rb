@@ -1,5 +1,7 @@
 require 'instrumental/version'
 require 'instrumental/system_timer'
+require 'instrumental/command_structs'
+require 'instrumental/event_aggregator'
 require 'logger'
 require 'openssl' rescue nil
 require 'resolv'
@@ -20,9 +22,11 @@ module Instrumental
     RESOLUTION_FAILURES_BEFORE_WAITING = 3
     RESOLUTION_WAIT                    = 30
     RESOLVE_TIMEOUT                    = 1
+    DEFAULT_FREQUENCY                  = 10
+    VALID_FREQUENCIES                  = [0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60]
 
 
-    attr_accessor :host, :port, :synchronous, :sender_queue, :dns_resolutions, :last_connect_at
+    attr_accessor :host, :port, :synchronous, :frequency, :sender_queue, :aggregator_queue, :dns_resolutions, :last_connect_at
     attr_reader :connection, :enabled, :secure
 
     def self.logger=(l)
@@ -74,13 +78,28 @@ module Instrumental
       @port            = (@port || default_port).to_i
       @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous     = !!options[:synchronous]
-      @frequency       = options.has_key?(:frequency) ? options[:frequency].to_f : 6.0
+
+      @frequency = if options.has_key?(:frequency)
+                     raise ArgumentError.new("Frequency must be a value that divides evenly into 60: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, or 60.") unless VALID_FREQUENCIES.include?(options[:frequency].to_i)
+                     if(@synchronous)
+                       logger.warn "Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode."
+                      0
+                    else
+                      options[:frequency].to_i
+                    end
+                  else
+                    DEFAULT_FREQUENCY
+                  end
+      
+      @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
       @pid             = Process.pid
       @allow_reconnect = true
       @dns_resolutions = 0
       @last_connect_at = 0
-      @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
+      
       @start_worker_mutex = Mutex.new
+      @aggregator_mutex = Mutex.new
+      @aggregator_queue = Queue.new
       @sender_queue = Queue.new
 
       setup_cleanup_at_exit if @enabled
@@ -95,7 +114,9 @@ module Instrumental
     #  agent.gauge('load', 1.23)
     def gauge(metric, value, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-         send_command(InstrumentalCommand.new("gauge".freeze, metric, value, time.to_i, count.to_i))
+         send_command(Instrumental::Command.new("gauge".freeze, metric, value, time.to_i, count.to_i))
+        # tempted to "gauge" this to a symbol? Don't. Frozen strings are very fast,
+        # and later we're going to to_s every one of these anyway.
         value
       else
         nil
@@ -143,7 +164,7 @@ module Instrumental
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-         send_command(InstrumentalCommand.new("increment".freeze, metric, value, time.to_i, count.to_i))
+         send_command(Instrumental::Command.new("increment".freeze, metric, value, time.to_i, count.to_i))
         value
       else
         nil
@@ -158,7 +179,7 @@ module Instrumental
     #  agent.notice('A notice')
     def notice(note, time = Time.now, duration = 0)
       if valid_note?(note)
-        send_command(InstrumentalNotice.new(note, time.to_i, duration.to_i))
+        send_command(Instrumental::Notice.new(note, time.to_i, duration.to_i))
         note
       else
         nil
@@ -208,12 +229,19 @@ module Instrumental
     #
     def stop
       disconnect
-      if @thread
-        @thread.kill
-        @thread = nil
+      if @sender_thread
+        @sender_thread.kill
+        @sender_thread = nil
+      end
+      if @aggregator_thread
+        @aggregator_thread.kill
+        @aggregator_thread = nil
       end
       if @sender_queue
         @sender_queue.clear
+      end
+      if @aggregator_queue
+        @aggregator_queue.clear
       end
     end
 
@@ -223,14 +251,17 @@ module Instrumental
     # where at_exit is bypassed like Resque workers.
     def cleanup
       if running?
-        logger.info "Cleaning up agent, queue size: #{@sender_queue.size}, thread running: #{@thread.alive?}"
+        logger.info "Cleaning up agent, aggregator_size: #{@aggregator_queue.size}, thread_running: #{@aggregator_thread.alive?}"
+        logger.info "Cleaning up agent, queue size: #{@sender_queue.size}, thread running: #{@sender_thread.alive?}"
         @allow_reconnect = false
-        if @sender_queue.size > 0
-          queue_message('exit')
+        if @sender_queue.size > 0 || @aggregator_queue.size > 0
+          @sender_queue << ['exit']
+          @aggregator_queue << ['exit']
           begin
-            with_timeout(EXIT_FLUSH_TIMEOUT) { @thread.join }
+            with_timeout(EXIT_FLUSH_TIMEOUT) { @aggregator_thread.join }
+            with_timeout(EXIT_FLUSH_TIMEOUT) { @sender_thread.join }
           rescue Timeout::Error
-            if @sender_queue.size > 0
+            if (@sender_queue.size || @aggregator_queue.size) > 0
               logger.error "Timed out working agent thread on exit, dropping #{@sender_queue.size} metrics"
             else
               logger.error "Timed out Instrumental Agent, exiting"
@@ -272,7 +303,7 @@ module Instrumental
     end
 
     def report_exception(e)
-#      puts "Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
+      # puts "--- Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
       logger.error "Exception of type #{e.class} occurred:\n#{e.message}\n#{e.backtrace.join("\n")}"
     end
 
@@ -295,18 +326,18 @@ module Instrumental
 
     def send_command(command)
       return logger.debug(command.to_s) unless enabled?
-      
       start_workers
-      if @sender_queue && @sender_queue.size < MAX_BUFFER
+      critical_queue = frequency.to_i == 0 ? @sender_queue : @aggregator_queue
+      if critical_queue && critical_queue.size < MAX_BUFFER
         @queue_full_warning = false
         logger.debug "Queueing: #{command.to_s}"
-        queue_message(command.to_s, { :synchronous => @synchronous })
+        queue_message(command, { :synchronous => @synchronous })
       else
         if !@queue_full_warning
           @queue_full_warning = true
-          logger.warn "Queue full(#{@sender_queue.size}), dropping commands..."
+          logger.warn "Queue full(#{critical_queue.size}), dropping commands..."
         end
-        logger.debug "Dropping command, queue full(#{@sender_queue.size}): #{command.to_s}"
+        logger.debug "Dropping command, queue full(#{critical_queue.size}): #{command.to_s}"
         nil
       end
     end
@@ -320,12 +351,14 @@ module Instrumental
       if options.delete(:synchronous)
         options[:sync_resource] ||= ConditionVariable.new
         @sync_mutex.synchronize {
-          @sender_queue << [message, options]
+          queue = message == "flush" ? @aggregator_queue : @sender_queue
+          queue << [message, options]
           options[:sync_resource].wait(@sync_mutex)
         }
-      else
-        # TODO not the sender if we are aggregating
+      elsif frequency.to_i == 0
         @sender_queue << [message, options]
+      else
+        @aggregator_queue << [message, options]
       end
       message
     end
@@ -354,13 +387,8 @@ module Instrumental
     end
 
     def start_workers
-      start_sender_worker
-      #start_aggregator_worker
-    end
-
-    def start_sender_worker
       # NOTE: We need a mutex around both `running?` and thread creation,
-      # otherwise we could create two threads.
+      # otherwise we could create too many threads.
       # Return early and queue the message if another thread is
       # starting the worker.
       return if !@start_worker_mutex.try_lock
@@ -374,9 +402,19 @@ module Instrumental
           @sync_mutex = Mutex.new
           @failures = 0
           @sockaddr_in = Socket.pack_sockaddr_in(@port, address)
-          logger.info "Starting thread"
-          @thread = Thread.new do
-            run_sender_loop
+
+          logger.info "Starting aggregator thread"
+          if !@aggregator_thread&.alive?
+            @aggregator_thread = Thread.new do
+              run_aggregator_loop
+            end
+          end
+
+          if !@sender_thread&.alive?
+            logger.info "Starting sender thread"
+            @sender_thread = Thread.new do
+              run_sender_loop
+            end
           end
         end
       ensure
@@ -412,6 +450,50 @@ module Instrumental
       sock
     end
 
+    def run_aggregator_loop
+      # if the sender queue is some level of full, should we keep aggregating until it empties out?
+      # what does this mean for aggregation slices - aggregating to nearest frequency will
+      # make the object needlessly larger, when minute resolution is what we have on the server
+      begin
+        loop do
+          # pop with timeout, pay attention to 'exit' and 'flush'
+          # temporarily...
+          command_and_args, command_options = @aggregator_queue.pop
+          if command_and_args
+            sync_resource = command_options && command_options[:sync_resource]
+            case command_and_args
+            when 'exit'
+              logger.info "Exiting, #{@aggregator_queue.size} commands remain"
+              return true
+            when 'flush'
+              if !@event_aggregator.nil?
+                @sender_queue << @event_aggregator
+                @event_aggregator = nil                 
+              end
+
+              @sender_queue << ['flush', command_options]
+              release_resource = true
+            when Notice
+              @sender_queue << [command_and_args, command_options]
+            else
+              
+              # we may have a command, do we need a new aggregator?
+              # only this thread should ever touch @event_aggregator, sync
+              # should be unecessary
+              @event_aggregator = EventAggregator.new if @event_aggregator.nil?
+              
+              logger.debug "Sending: #{command_and_args}"
+              @event_aggregator.put(command_and_args)
+            end
+            command_and_args = nil
+            command_options = nil
+          end
+        end
+      rescue Exception => err
+        report_exception(err)
+      end
+    end
+
     def run_sender_loop
       @failures = 0
       begin
@@ -445,8 +527,11 @@ module Instrumental
             when 'flush'
               release_resource = true
             else
-              logger.debug "Sending: #{command_and_args.chomp}"
-              @socket.puts command_and_args
+              commands = command_and_args.is_a?(EventAggregator) ? command_and_args.values.values : [command_and_args]
+              commands.each do |command|
+                logger.debug "Sending: #{command}"
+                @socket.puts command
+              end
             end
             command_and_args = nil
             command_options = nil
@@ -501,9 +586,13 @@ module Instrumental
     end
 
     def running?
-      !@thread.nil? && @pid == Process.pid && @thread.alive?
+      !@sender_thread.nil? &&
+        !@aggregator_thread.nil? &&
+        @pid == Process.pid &&
+        @sender_thread.alive? &&
+        @aggregator_thread.alive?
     end
-
+    
     def flush_socket(socket)
       socket.flush
     rescue Exception => e
@@ -530,18 +619,6 @@ module Instrumental
 
     def allows_secure?
       defined?(OpenSSL)
-    end
-  end
-
-  InstrumentalCommand = Struct.new(:command, :metric, :value, :time, :count) do
-    def to_s
-      [command, metric, value, time, count].map(&:to_s).join(" ")
-    end
-  end
-
-  InstrumentalNotice = Struct.new(:note, :time, :duration) do
-    def to_s
-      ["notice".freeze, time, duration, note].map(&:to_s).join(" ")
     end
   end
 end

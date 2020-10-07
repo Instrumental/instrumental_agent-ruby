@@ -15,13 +15,6 @@ class EventAggregator
     @values[metadata] = (command + @values[metadata])
   end
 
-  def each
-    return enum_for(:each) unless block_given?
-    @values.each do |(type, metric, time, project_id), (value, count)|
-      yield(type, metric, value, count, time, project_id, @received_at)
-    end
-  end
-
   def size
     @values.size
   end
