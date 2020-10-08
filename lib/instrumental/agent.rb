@@ -17,6 +17,7 @@ module Instrumental
     EXIT_FLUSH_TIMEOUT                 = 5
     HOSTNAME                           = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
     MAX_BUFFER                         = 5000
+    MAX_AGGREGATOR_SIZE                = 10000
     MAX_RECONNECT_DELAY                = 15
     REPLY_TIMEOUT                      = 10
     RESOLUTION_FAILURES_BEFORE_WAITING = 3
@@ -56,7 +57,7 @@ module Instrumental
       # port:        8001
       # enabled:     true
       # synchronous: false
-      # frequency:   6
+      # frequency:   10
       # secure:      true
       # verify:      true
       @api_key         = api_key
@@ -100,6 +101,7 @@ module Instrumental
       @start_worker_mutex = Mutex.new
       @aggregator_queue = Queue.new
       @sender_queue = Queue.new
+
 
       setup_cleanup_at_exit if @enabled
 
@@ -454,22 +456,22 @@ module Instrumental
       # what does this mean for aggregation slices - aggregating to nearest frequency will
       # make the object needlessly larger, when minute resolution is what we have on the server
       begin
-        last_pop = Time.now
         loop do
-          time_to_wait = [frequency - (Time.now - last_pop), 0].max
+          next_frequency = (Time.now.to_i / frequency) + frequency
+          time_to_wait = [(next_frequency - Time.now.to_f), 0].max
 
           command_and_args, command_options = if @event_aggregator&.size.to_i > MAX_BUFFER
                                                 command_and_args, command_options = ['forward', {}]
                                               else
                                                 begin
                                                   with_timeout(time_to_wait) do
+                                                    puts "pop"
                                                     @aggregator_queue.pop
                                                   end
                                                 rescue Timeout::Error
                                                   ['forward', {}]
                                                 end
                                               end
-          last_pop = Time.now
           if command_and_args
             sync_resource = command_options && command_options[:sync_resource]
             case command_and_args
