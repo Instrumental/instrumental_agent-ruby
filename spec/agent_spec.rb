@@ -847,7 +847,7 @@ shared_examples "Instrumental Agent" do
             expect(agent.instance_variable_get(:@event_aggregator).values.values.first.metric).to eq('test')
           end
         end
-        
+
         it "batches data before sending" do
           Timecop.freeze do
             agent.increment('a_metric')
@@ -859,7 +859,7 @@ shared_examples "Instrumental Agent" do
             expect(server.commands.grep(/_metric/).size).to eq(2)
             aggregated_metric = server.commands.grep(/a_metric/).first.split(" ")
             expect(aggregated_metric[2].to_i).to eq(2) # value
-            expect(aggregated_metric[4].to_i).to eq(2) # count            
+            expect(aggregated_metric[4].to_i).to eq(2) # count
           end
         end
 
@@ -876,7 +876,7 @@ shared_examples "Instrumental Agent" do
           expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
           expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
 
-          wait do          
+          wait do
             expect(server.commands.grep(/test_metric/).size).to eq(100)
             expect(server.commands.grep(/other_metric/).size).to eq(1)
           end
@@ -900,7 +900,7 @@ shared_examples "Instrumental Agent" do
             expect(server.commands.grep(/metric/).size).to eq(1)
           end
         end
-        
+
         it "can be disabled by setting frequency to 0" do
           agent.frequency = 0
           expect(EventAggregator).not_to receive(:new)
@@ -914,7 +914,7 @@ shared_examples "Instrumental Agent" do
           agent = Instrumental::Agent.new('test_token', :frequency => "15")
           expect(agent.frequency).to eq(15)
         end
-        
+
         it "should not be enabled at the same time as synchronous" do
           expect(Instrumental::Agent.logger).to receive(:warn).with(/Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode./)
           agent = Instrumental::Agent.new('test_token', :synchronous => true, :frequency => 6)
@@ -938,7 +938,7 @@ shared_examples "Instrumental Agent" do
         end
 
         it "sends aggregated metrics after specified frequency, even if no flush is sent" do
-          frequency = 3
+          agent.frequency = 3
           agent.increment('metric')
           agent.increment('metric')
           agent.gauge('other', 1)
@@ -951,10 +951,75 @@ shared_examples "Instrumental Agent" do
           expect(server.commands.grep(/other 3/).size).to eq(1)
         end
 
-        it "will overflow if the aggregator queue is full"
-        it "will not pop off the aggregator queue if the aggregator is too large"
-        it "will not send aggregators to the sender queue if it has an item and the sender thread is not waiting"
-        
+        # this test really relies on the worker threads not working unexpectedly
+        it "will overflow if the aggregator queue is full" do
+          with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+            allow(agent.logger).to receive(:debug)
+            expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 4 300 1")
+            agent.increment('overflow_test', 4, 300, 1)
+            agent.increment('overflow_test', 4, 300, 1)
+            agent.increment('overflow_test', 4, 300, 1)
+            agent.increment('overflow_test', 4, 300, 1)
+          end
+
+          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+          agent.flush
+          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+        end
+
+        # this test really relies on the worker threads not working unexpectedly
+        it "will not pop off the aggregator queue if the aggregator is too large" do
+          with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+            agent.increment('overflow_test1', 4, 300, 1)
+            agent.increment('overflow_test2', 4, 300, 1)
+            agent.increment('overflow_test3', 4, 300, 1)
+            wait(1)
+            agent.increment('overflow_test4', 4, 300, 1)
+          end
+          # only 1 because the 4th command triggers a forward
+          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(1)
+          agent.flush
+          expect(server.commands.grep(/overflow_test/).size).to eq(4)
+        end
+
+        # this test really relies on the worker threads not working unexpectedly
+        context do
+          let(:listen) { false }
+
+          it "will not send aggregators to the sender queue if the sender thread is not ready" do
+            with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
+              agent.frequency = 1
+              # fill the queue
+              agent.increment('overflow_test1')
+              agent.increment('overflow_test2')
+              agent.increment('overflow_test3')
+              # flush the aggregator to the sender
+              wait(2) do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+              end
+              # fill the queue again
+              agent.increment('overflow_test1')
+              agent.increment('overflow_test2')
+              agent.increment('overflow_test3')
+              # flush the next aggregator to the sender
+              wait(2) do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+              end
+              # fill the queue a third time
+              agent.increment('overflow_test1')
+              agent.increment('overflow_test2')
+              agent.increment('overflow_test3')
+              wait(2) do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+              end
+              # we should be jammed up now
+              agent.increment('overflow_test4')
+              agent.increment('overflow_test5')
+              agent.increment('overflow_test6')
+              expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+            end
+          end
+        end
       end
     end
   end

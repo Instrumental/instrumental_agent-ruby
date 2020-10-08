@@ -90,15 +90,14 @@ module Instrumental
                   else
                     DEFAULT_FREQUENCY
                   end
-      
+
       @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
       @pid             = Process.pid
       @allow_reconnect = true
       @dns_resolutions = 0
       @last_connect_at = 0
-      
+
       @start_worker_mutex = Mutex.new
-      @aggregator_mutex = Mutex.new
       @aggregator_queue = Queue.new
       @sender_queue = Queue.new
 
@@ -455,10 +454,22 @@ module Instrumental
       # what does this mean for aggregation slices - aggregating to nearest frequency will
       # make the object needlessly larger, when minute resolution is what we have on the server
       begin
+        last_pop = Time.now
         loop do
-          # pop with timeout, pay attention to 'exit' and 'flush'
-          # temporarily...
-          command_and_args, command_options = @aggregator_queue.pop
+          time_to_wait = [frequency - (Time.now - last_pop), 0].max
+
+          command_and_args, command_options = if @event_aggregator&.size.to_i > MAX_BUFFER
+                                                command_and_args, command_options = ['forward', {}]
+                                              else
+                                                begin
+                                                  with_timeout(time_to_wait) do
+                                                    @aggregator_queue.pop
+                                                  end
+                                                rescue Timeout::Error
+                                                  ['forward', {}]
+                                                end
+                                              end
+          last_pop = Time.now
           if command_and_args
             sync_resource = command_options && command_options[:sync_resource]
             case command_and_args
@@ -468,21 +479,21 @@ module Instrumental
             when 'flush'
               if !@event_aggregator.nil?
                 @sender_queue << @event_aggregator
-                @event_aggregator = nil                 
+                @event_aggregator = nil
               end
-
               @sender_queue << ['flush', command_options]
-              release_resource = true
+            when 'forward'
+              if !@event_aggregator.nil?
+                next if @sender_queue.size > 0 && @sender_queue.waiting < 1
+                @sender_queue << @event_aggregator
+                @event_aggregator = nil
+              end
             when Notice
               @sender_queue << [command_and_args, command_options]
             else
-              
-              # we may have a command, do we need a new aggregator?
-              # only this thread should ever touch @event_aggregator, sync
-              # should be unecessary
               @event_aggregator = EventAggregator.new if @event_aggregator.nil?
-              
-              logger.debug "Sending: #{command_and_args}"
+
+              logger.debug "Sending: #{command_and_args} to aggregator"
               @event_aggregator.put(command_and_args)
             end
             command_and_args = nil
@@ -497,9 +508,9 @@ module Instrumental
     def run_sender_loop
       @failures = 0
       begin
-      logger.info "connecting to collector"
-      command_and_args = nil
-      command_options = nil
+        logger.info "connecting to collector"
+        command_and_args = nil
+        command_options = nil
         with_timeout(CONNECT_TIMEOUT) do
           @socket = open_socket(@sockaddr_in, @secure, @verify_cert)
         end
@@ -592,7 +603,7 @@ module Instrumental
         @sender_thread.alive? &&
         @aggregator_thread.alive?
     end
-    
+
     def flush_socket(socket)
       socket.flush
     rescue Exception => e
