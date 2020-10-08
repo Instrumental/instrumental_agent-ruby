@@ -17,13 +17,13 @@ module Instrumental
     EXIT_FLUSH_TIMEOUT                 = 5
     HOSTNAME                           = Socket.gethostbyname(Socket.gethostname).first rescue Socket.gethostname
     MAX_BUFFER                         = 5000
-    MAX_AGGREGATOR_SIZE                = 10000
+    MAX_AGGREGATOR_SIZE                = 5000
     MAX_RECONNECT_DELAY                = 15
     REPLY_TIMEOUT                      = 10
     RESOLUTION_FAILURES_BEFORE_WAITING = 3
     RESOLUTION_WAIT                    = 30
     RESOLVE_TIMEOUT                    = 1
-    DEFAULT_FREQUENCY                  = 10
+    DEFAULT_FREQUENCY                  = 0
     VALID_FREQUENCIES                  = [0, 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60]
 
 
@@ -80,17 +80,11 @@ module Instrumental
       @enabled         = options.has_key?(:enabled) ? !!options[:enabled] : true
       @synchronous     = !!options[:synchronous]
 
-      @frequency = if options.has_key?(:frequency)
-                     raise ArgumentError.new("Frequency must be a value that divides evenly into 60: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, or 60.") unless VALID_FREQUENCIES.include?(options[:frequency].to_i)
-                     if(@synchronous)
-                       logger.warn "Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode."
-                      0
-                    else
-                      options[:frequency].to_i
-                    end
-                  else
-                    DEFAULT_FREQUENCY
-                  end
+      if options.has_key?(:frequency)
+        self.frequency = options[:frequency]
+      else
+        self.frequency = DEFAULT_FREQUENCY
+      end
 
       @metrician       = options[:metrician].nil? ? true : !!options[:metrician]
       @pid             = Process.pid
@@ -217,6 +211,22 @@ module Instrumental
 
     def logger
       @logger || self.class.logger
+    end
+
+    def frequency=(frequency)
+      freq = frequency.to_i
+      if !VALID_FREQUENCIES.include?(freq)
+        logger.warn "Frequency must be a value that divides evenly into 60: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, or 60."
+        # this will make all negative numbers and nils into 0s
+        freq = VALID_FREQUENCIES.select{ |f| f < freq }.max.to_i
+      end
+
+      @frequency = if(@synchronous)
+                     logger.warn "Synchronous and Frequency should not be enabled at the same time! Defaulting to synchronous mode."
+                     0
+                   else
+                     freq
+                   end
     end
 
     # Stopping the agent will immediately stop all communication
@@ -350,7 +360,7 @@ module Instrumental
     def queue_message(message, options = {})
       return message unless enabled?
 
-      # imagine it's a reverse merge, but with less allocations
+      # imagine it's a reverse merge, but with fewer allocations
       options[:allow_reconnect] = @allow_reconnect unless options.has_key?(:allow_reconnect)
 
       if options.delete(:synchronous)
@@ -462,10 +472,15 @@ module Instrumental
       begin
         loop do
           now = Time.now.to_i
-          next_frequency = (now - (now % frequency)) + frequency
-          time_to_wait = [(next_frequency - Time.now.to_f), 0].max
+          time_to_wait = if frequency == 0
+                           0
+                         else
+                           next_frequency = (now - (now % frequency)) + frequency
+                           time_to_wait = [(next_frequency - Time.now.to_f), 0].max
+                         end
 
           command_and_args, command_options = if @event_aggregator&.size.to_i > MAX_AGGREGATOR_SIZE
+                                                logger.info "Aggregator full, flushing early with #{MAX_AGGREGATOR_SIZE} metrics."
                                                 command_and_args, command_options = ['forward', {}]
                                               else
                                                 begin
@@ -490,14 +505,14 @@ module Instrumental
               @sender_queue << ['flush', command_options]
             when 'forward'
               if !@event_aggregator.nil?
-                next if @sender_queue.size > 0 && @sender_queue.waiting < 1
+                next if @sender_queue.size > 0 && @sender_queue.num_waiting < 1
                 @sender_queue << @event_aggregator
                 @event_aggregator = nil
               end
             when Notice
               @sender_queue << [command_and_args, command_options]
             else
-              @event_aggregator = EventAggregator.new if @event_aggregator.nil?
+              @event_aggregator = EventAggregator.new(frequency: @frequency) if @event_aggregator.nil?
 
               logger.debug "Sending: #{command_and_args} to aggregator"
               @event_aggregator.put(command_and_args)

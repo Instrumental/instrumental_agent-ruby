@@ -1,9 +1,9 @@
 class EventAggregator
   attr_accessor :counts, :values, :received_at, :frequency
  
-  def initialize(options = {})
+  def initialize(frequency:)
     @values = Hash.new
-    @frequency = options[:frequency] || Instrumental::Agent::DEFAULT_FREQUENCY
+    @frequency = frequency
   end
 
   def put(command)

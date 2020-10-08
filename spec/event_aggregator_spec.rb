@@ -37,7 +37,7 @@ describe EventAggregator do
 
   it "should aggregate put operations to the same metric and last type wins" do
     Timecop.freeze do
-      agg = EventAggregator.new
+      agg = EventAggregator.new(frequency: 6)
 
       agg.put(Instrumental::Command.new("gauge", "hello", 3.0, Time.now, 1))
       agg.put(Instrumental::Command.new("increment", "hello", 4.0, Time.now, 1))

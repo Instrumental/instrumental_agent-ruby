@@ -48,6 +48,12 @@ shared_examples "Instrumental Agent" do
     let(:authenticate) { true }
     let(:server)       { TestServer.new(:listen => listen, :authenticate => authenticate, :response => response, :secure => secure?) }
 
+    # Time Travel Options
+    let(:start_of_minute) do
+      now = Time.now.to_i
+      Time.at(now - (now % 60))
+    end
+
     before do
       Instrumental::Agent.logger.level = Logger::UNKNOWN
       @server = server
@@ -315,14 +321,6 @@ shared_examples "Instrumental Agent" do
           expect(agent.increment("test")).to eq(1)
         end
         expect(agent.increment("test")).to eq(nil)
-      end
-
-      it "should track invalid metrics" do
-        expect(agent.logger).to receive(:warn).with(/%%/)
-        agent.increment(' %% .!#@$%^&*', 1, 1)
-        wait do
-          expect(server.commands.join("\n")).to include("increment agent.invalid_metric")
-        end
       end
 
       it "should allow reasonable metric names" do
@@ -807,40 +805,37 @@ shared_examples "Instrumental Agent" do
 
     describe Instrumental::Agent, "aggregation" do
       context "aggregation enabled" do
-        let(:frequency) { 6 }
+        let(:frequency) { 2 }
 
         it "can be enabled at Agent.new time" do
-          expect(agent.frequency).to eq(6.0)
+          expect(agent.frequency).to eq(2)
         end
 
         it "can be modified by setting the agent frequency" do
           agent.frequency = 15
-          expect(agent.frequency).to eq(15.0)
+          expect(agent.frequency).to eq(15)
         end
 
-        it "is enabled by default" do
+        it "is disabled by default" do
           agent = Instrumental::Agent.new('test_token')
-          expect(agent.frequency.to_f).not_to eq(0.0)
+          expect(agent.frequency.to_f).to eq(0)
         end
 
         it "should only allow frequencies that align with minutes" do
-          (1..100).each do |freq|
-            if 60 % freq == 0
-              expect(Instrumental::Agent.new('test_token', :frequency => freq).frequency).to eq(freq)
-              expect(Instrumental::Agent::VALID_FREQUENCIES).to include(freq)
-            else
-              expect{ Instrumental::Agent.new('test_token', :frequency => freq) }.to raise_error(ArgumentError)
-            end
+          (-5..100).each do |freq|
+            agent.frequency = freq
+            expect(Instrumental::Agent::VALID_FREQUENCIES).to include(agent.frequency)
           end
         end
 
         it "bypasses aggregator queue entirely for most commands when frequency == 0" do
-          agent.frequency = 10 # this is red - 0 for green
+          agent.frequency = 0 # this is red - 0 for green
           expect(EventAggregator).not_to receive(:new)
           agent.increment('a_metric')
         end
 
         it "adds data to the event aggregator and does not immediately send it" do
+          Timecop.travel start_of_minute
           agent.increment('test')
           wait do
             expect(agent.instance_variable_get(:@event_aggregator).size).to eq(1)
@@ -860,6 +855,24 @@ shared_examples "Instrumental Agent" do
             aggregated_metric = server.commands.grep(/a_metric/).first.split(" ")
             expect(aggregated_metric[2].to_i).to eq(2) # value
             expect(aggregated_metric[4].to_i).to eq(2) # count
+          end
+        end
+
+        it "aggregates to the specified frequency within the aggregator" do
+          Timecop.travel(start_of_minute)
+          agent.frequency = 15
+          expect(agent.frequency).not_to be(Instrumental::Agent::DEFAULT_FREQUENCY)
+          agent.increment('metric', 1, Time.at(0))
+
+          # will get aligned to the closest frequency (15)
+          agent.increment('metric', 1, Time.at(20))
+          wait do
+            expect(agent.instance_variable_get(:@event_aggregator).values.keys).to eq(["metric:0", "metric:15"])
+          end
+          agent.flush
+          wait do
+            expect(server.commands.grep(/metric 1 0/).size).to eq(1)
+            expect(server.commands.grep(/metric 1 15/).size).to eq(1)
           end
         end
 
@@ -887,7 +900,7 @@ shared_examples "Instrumental Agent" do
           agent.notice "things are happening", 0, 100
           agent.notice "things are happening", 0, 100
           agent.notice "things are happening", 0, 100
-          wait(1) do
+          wait do
             expect(server.commands.grep(/things are happening/).size).to eq(3)
           end
         end
@@ -896,7 +909,7 @@ shared_examples "Instrumental Agent" do
           agent.frequency = nil
           expect(EventAggregator).not_to receive(:new)
           agent.increment('metric')
-          wait(1) do
+          wait do
             expect(server.commands.grep(/metric/).size).to eq(1)
           end
         end
@@ -905,9 +918,20 @@ shared_examples "Instrumental Agent" do
           agent.frequency = 0
           expect(EventAggregator).not_to receive(:new)
           agent.increment('metric')
-          wait(1) do
+          wait do
             expect(server.commands.grep(/metric/).size).to eq(1)
           end
+        end
+
+        it "automatically uses the highest-without-going-over frequency for a bad frequency" do
+          agent.frequency = 17
+          expect(agent.frequency).to eq(15)
+          agent.frequency = 69420
+          expect(agent.frequency).to eq(60)
+          agent.frequency = 0
+          expect(agent.frequency).to eq(0)
+          agent.frequency = -1
+          expect(agent.frequency).to eq(0)
         end
 
         it "can take strings as frequency" do
@@ -927,32 +951,35 @@ shared_examples "Instrumental Agent" do
           agent.increment('metric')
           agent.synchronous = true
           agent.increment('metric')
-          wait(1) do
+          wait do
             expect(server.commands.grep(/metric 1/).size).to eq(1)
           end
           agent.flush
-          wait(1) do
+          wait do
             expect(server.commands.grep(/metric 1/).size).to eq(1)
             expect(server.commands.grep(/metric 2/).size).to eq(1)
           end
         end
 
         it "sends aggregated metrics after specified frequency, even if no flush is sent" do
-          agent.frequency = 3
+          agent.frequency = 1
+          Timecop.travel(start_of_minute)
           agent.increment('metric')
           agent.increment('metric')
           agent.gauge('other', 1)
           agent.gauge('other', 1)
           agent.gauge('other', 1)
-          wait(1)
-          expect(server.commands.grep(/metric/).size).to eq(0)
-          wait(3)
+          sleep (0.5)
+          wait { expect(server.commands.grep(/metric/).size).to eq(0) }
+          sleep (0.51) # total sleep > 1 frequency
+
           expect(server.commands.grep(/metric 2/).size).to eq(1)
           expect(server.commands.grep(/other 3/).size).to eq(1)
         end
 
         # this test really relies on the worker threads not working unexpectedly
         it "will overflow if the aggregator queue is full" do
+          Timecop.travel(start_of_minute)
           with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
             allow(agent.logger).to receive(:debug)
             expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 4 300 1")
@@ -960,63 +987,113 @@ shared_examples "Instrumental Agent" do
             agent.increment('overflow_test', 4, 300, 1)
             agent.increment('overflow_test', 4, 300, 1)
             agent.increment('overflow_test', 4, 300, 1)
-          end
 
-          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
-          agent.flush
-          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+            expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+            agent.flush
+            expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+          end
         end
 
-        # this test really relies on the worker threads not working unexpectedly
-        it "will not pop off the aggregator queue if the aggregator is too large" do
-          with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-            agent.increment('overflow_test1', 4, 300, 1)
-            agent.increment('overflow_test2', 4, 300, 1)
-            agent.increment('overflow_test3', 4, 300, 1)
-            wait(1)
-            agent.increment('overflow_test4', 4, 300, 1)
+        it "if aggregator is at max size, next command will force a forward to the sender thread" do
+          Timecop.travel(start_of_minute)
+          with_constants('Instrumental::Agent::MAX_AGGREGATOR_SIZE' => 3) do
+            agent.increment('overflow_test1')
+            agent.increment('overflow_test2')
+            agent.increment('overflow_test3')
+            agent.increment('overflow_test4')
+            agent.increment('overflow_test5')
+
+            # only 1 because the 5th command triggers a forward of the first 4
+            wait do
+              expect(agent.instance_variable_get(:@event_aggregator).size).to eq(1)
+            end
+            agent.flush
+            wait do
+              expect(server.commands.grep(/overflow_test/).size).to eq(5)
+            end
           end
-          # only 1 because the 4th command triggers a forward
-          expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(1)
-          agent.flush
-          expect(server.commands.grep(/overflow_test/).size).to eq(4)
         end
 
-        # this test really relies on the worker threads not working unexpectedly
         context do
           let(:listen) { false }
-
           it "will not send aggregators to the sender queue if the sender thread is not ready" do
-            with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-              agent.frequency = 1
+            Timecop.travel(start_of_minute)
+            agent.frequency = 1
+
+            with_constants('Instrumental::Agent::MAX_BUFFER' => 3,
+                          'Instrumental::Agent::MAX_AGGREGATOR_SIZE' => 4) do
+
               # fill the queue
               agent.increment('overflow_test1')
               agent.increment('overflow_test2')
               agent.increment('overflow_test3')
-              # flush the aggregator to the sender
-              wait(2) do
+
+              # wait until they are all in the aggregator
+              wait do
                 expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+                expect(agent.instance_variable_get(:@event_aggregator).size).to eq(3)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
               end
+
               # fill the queue again
               agent.increment('overflow_test1')
               agent.increment('overflow_test2')
               agent.increment('overflow_test3')
-              # flush the next aggregator to the sender
-              wait(2) do
+
+              # wait until they are all in the aggregator
+              wait do
                 expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+                expect(agent.instance_variable_get(:@event_aggregator).size).to eq(3)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(0)
               end
-              # fill the queue a third time
-              agent.increment('overflow_test1')
-              agent.increment('overflow_test2')
-              agent.increment('overflow_test3')
-              wait(2) do
-                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+
+              # wait for the aggregator to get forwarded and popped by the sender
+              wait do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+                expect(agent.instance_variable_get(:@event_aggregator)).to eq(nil)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(1)
               end
-              # we should be jammed up now
+
+              # fill the queue again
               agent.increment('overflow_test4')
               agent.increment('overflow_test5')
               agent.increment('overflow_test6')
-              expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+
+              # wait for them all to be in the aggregator
+              wait do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
+                expect(agent.instance_variable_get(:@event_aggregator).size).to eq(3)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(1)
+              end
+
+              # sleep until the next forward is done
+              sleep(agent.frequency + 0.1)
+
+              # fill the queue again
+              agent.increment('overflow_test7')
+              agent.increment('overflow_test8')
+              agent.increment('overflow_test9')
+
+              # because sending is blocked, the prevous aggregator never sent
+              # when it hits max size, the aggregator queue starts backing up
+              wait do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(1)
+                expect(agent.instance_variable_get(:@event_aggregator).size).to eq(5)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(1)
+              end
+
+              # send 3 more items, to overflow the aggregator queue
+              allow(agent.logger).to receive(:debug)
+              expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_testc 4 300 1")
+              agent.increment('overflow_testa')
+              agent.increment('overflow_testb')
+              agent.increment('overflow_testc', 4, 300, 1) # will get dropped
+
+              wait do
+                expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
+                expect(agent.instance_variable_get(:@event_aggregator).size).to eq(5)
+                expect(agent.instance_variable_get(:@sender_queue).size).to eq(1)
+              end
             end
           end
         end
