@@ -120,6 +120,17 @@ I = Instrumental::Agent.new('PROJECT_API_TOKEN',
 )
 ```
 
+### Upgrading from 2.x
+
+Agent version 3.x drops support for some older rubies, but should otherwise be a drop-in replacement. If you wish to enable Aggregation, enable the agent with the frequency option set to the number of seconds you would like to wait between flushes. For example:
+
+```
+I = Instrumental::Agent.new('PROJECT_API_TOKEN',
+  :enabled => Rails.env.production?,
+  :frequency => 15
+)
+```
+
 ## Troubleshooting & Help
 
 We are here to help. Email us at [support@instrumentalapp.com](mailto:support@instrumentalapp.com).
