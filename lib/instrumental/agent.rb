@@ -115,7 +115,7 @@ module Instrumental
     #  agent.gauge('load', 1.23)
     def gauge(metric, value, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-         send_command(Instrumental::Command.new("gauge".freeze, metric, value, time.to_i, count.to_i))
+         send_command(Instrumental::Command.new("gauge".freeze, metric, value, time, count))
         # tempted to "gauge" this to a symbol? Don't. Frozen strings are very fast,
         # and later we're going to to_s every one of these anyway.
         value
@@ -165,7 +165,7 @@ module Instrumental
     #  agent.increment('users')
     def increment(metric, value = 1, time = Time.now, count = 1)
       if valid?(metric, value, time, count) &&
-         send_command(Instrumental::Command.new("increment".freeze, metric, value, time.to_i, count.to_i))
+         send_command(Instrumental::Command.new("increment".freeze, metric, value, time, count))
         value
       else
         nil
@@ -180,7 +180,7 @@ module Instrumental
     #  agent.notice('A notice')
     def notice(note, time = Time.now, duration = 0)
       if valid_note?(note)
-        send_command(Instrumental::Notice.new(note, time.to_i, duration.to_i))
+        send_command(Instrumental::Notice.new(note, time, duration))
         note
       else
         nil
@@ -262,8 +262,12 @@ module Instrumental
             with_timeout(EXIT_FLUSH_TIMEOUT) { @aggregator_thread.join }
             with_timeout(EXIT_FLUSH_TIMEOUT) { @sender_thread.join }
           rescue Timeout::Error
-            if (@sender_queue.size || @aggregator_queue.size) > 0
-              logger.error "Timed out working agent thread on exit, dropping #{@sender_queue.size} metrics"
+            total_size = @sender_queue&.size.to_i +
+                         @aggregator_queue&.size.to_i +
+                         @event_aggregator&.size.to_i
+
+            if total_size > 0
+              logger.error "Timed out working agent thread on exit, dropping #{total_size} metrics"
             else
               logger.error "Timed out Instrumental Agent, exiting"
             end
@@ -457,15 +461,15 @@ module Instrumental
       # make the object needlessly larger, when minute resolution is what we have on the server
       begin
         loop do
-          next_frequency = (Time.now.to_i / frequency) + frequency
+          now = Time.now.to_i
+          next_frequency = (now - (now % frequency)) + frequency
           time_to_wait = [(next_frequency - Time.now.to_f), 0].max
 
-          command_and_args, command_options = if @event_aggregator&.size.to_i > MAX_BUFFER
+          command_and_args, command_options = if @event_aggregator&.size.to_i > MAX_AGGREGATOR_SIZE
                                                 command_and_args, command_options = ['forward', {}]
                                               else
                                                 begin
                                                   with_timeout(time_to_wait) do
-                                                    puts "pop"
                                                     @aggregator_queue.pop
                                                   end
                                                 rescue Timeout::Error
@@ -539,12 +543,14 @@ module Instrumental
               return true
             when 'flush'
               release_resource = true
-            else
-              commands = command_and_args.is_a?(EventAggregator) ? command_and_args.values.values : [command_and_args]
-              commands.each do |command|
+            when EventAggregator
+              command_and_args.values.values.each do |command|
                 logger.debug "Sending: #{command}"
                 @socket.puts command
               end
+            else
+              logger.debug "Sending: #{command_and_args}"
+              @socket.puts command_and_args
             end
             command_and_args = nil
             command_options = nil
