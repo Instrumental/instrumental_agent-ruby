@@ -1,3 +1,9 @@
+### 3.0.0.beta [October 8, 2020]
+* Drop support for outdated versions of Ruby
+* Explicitly add support for new versions of Ruby
+* Add support for client-side aggregation
+* Note: the agent API has NOT changed.  This is a major release because of the significant changes in Ruby versions officially supported.
+
 ### 3.0.0.alpha [August 22, 2019]
 * Drop support for outdated versions of Ruby
 * Explicitly add support for new versions of Ruby
