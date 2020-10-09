@@ -832,7 +832,7 @@ shared_examples "Instrumental Agent" do
 
         it "bypasses aggregator queue entirely for most commands when frequency == 0" do
           agent.frequency = 0 # this is red - 0 for green
-          expect(EventAggregator).not_to receive(:new)
+          expect(Instrumental::EventAggregator).not_to receive(:new)
           agent.increment('a_metric')
         end
 
@@ -909,7 +909,7 @@ shared_examples "Instrumental Agent" do
 
         it "can be disabled by setting frequency to nil" do
           agent.frequency = nil
-          expect(EventAggregator).not_to receive(:new)
+          expect(Instrumental::EventAggregator).not_to receive(:new)
           agent.increment('metric')
           wait do
             expect(server.commands.grep(/metric/).size).to eq(1)
@@ -918,7 +918,7 @@ shared_examples "Instrumental Agent" do
 
         it "can be disabled by setting frequency to 0" do
           agent.frequency = 0
-          expect(EventAggregator).not_to receive(:new)
+          expect(Instrumental::EventAggregator).not_to receive(:new)
           agent.increment('metric')
           wait do
             expect(server.commands.grep(/metric/).size).to eq(1)
