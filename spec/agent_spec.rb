@@ -979,23 +979,6 @@ shared_examples "Instrumental Agent" do
           expect(server.commands.grep(/other 3/).size).to eq(1)
         end
 
-        # this test really relies on the worker threads not working unexpectedly
-        it "will overflow if the aggregator queue is full" do
-          Timecop.travel(start_of_minute)
-          with_constants('Instrumental::Agent::MAX_BUFFER' => 3) do
-            allow(agent.logger).to receive(:debug)
-            expect(agent.logger).to receive(:debug).with("Dropping command, queue full(3): increment overflow_test 4 300 1")
-            agent.increment('overflow_test', 4, 300, 1)
-            agent.increment('overflow_test', 4, 300, 1)
-            agent.increment('overflow_test', 4, 300, 1)
-            agent.increment('overflow_test', 4, 300, 1)
-
-            expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(3)
-            agent.flush
-            expect(agent.instance_variable_get(:@aggregator_queue).size).to eq(0)
-          end
-        end
-
         it "if aggregator is at max size, next command will force a forward to the sender thread" do
           Timecop.travel(start_of_minute)
           with_constants('Instrumental::Agent::MAX_AGGREGATOR_SIZE' => 3) do
