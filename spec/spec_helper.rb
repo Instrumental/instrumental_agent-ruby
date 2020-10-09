@@ -9,6 +9,15 @@ require 'test_server'
 RSpec.configure do |config|
 
   config.before(:all) do
+    # this is heavily threaded code with lots of really interesting
+    # comparison and matching. forcing rspec to load all its differs
+    # and matchers up front can save considerable time.
+    # Lazy loading these things can be so slow that it causes false
+    # failures in some tests.
+    begin
+      expect(1).to eq(2)
+    rescue Exception
+    end
   end
 
   config.before(:each) do

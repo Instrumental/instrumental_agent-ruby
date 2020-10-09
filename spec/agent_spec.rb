@@ -636,20 +636,21 @@ shared_examples "Instrumental Agent" do
           end
         end
 
-        it "should not wait to exit a process if there are no commands queued" do
+        it "should follow normal exit procedures whether or not there are commands queued" do
           allow(agent).to receive(:open_socket) { |*args, &block| sleep(5) && block.call }
-          with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
+          with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 1) do
             if (pid = fork { agent.increment('foo', 1); agent.sender_queue.clear })
               tm = Time.now.to_f
               Process.wait(pid)
               diff = Time.now.to_f - tm
-              expect(diff).to be < 1
+              expect(diff).to be < 2
+              expect(diff).to be > 1
             end
           end
         end
       end
 
-      it "should not wait longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
+      it "should not wait much longer than EXIT_FLUSH_TIMEOUT to attempt flushing the socket when disconnecting" do
         agent.increment('foo', 1)
         wait do
           expect(server.commands.grep(/foo/).size).to eq(1)
@@ -665,12 +666,13 @@ shared_examples "Instrumental Agent" do
               raise
             end
           end.join
-        end
+        end.at_least(1).times
+
         with_constants('Instrumental::Agent::EXIT_FLUSH_TIMEOUT' => 3) do
           tm = Time.now.to_f
           agent.cleanup
           diff = Time.now.to_f - tm
-          expect(diff).to be <= 3
+          expect(diff).to be <= 3.1
         end
       end
 
@@ -1094,6 +1096,33 @@ shared_examples "Instrumental Agent" do
                 expect(agent.instance_variable_get(:@event_aggregator).size).to eq(5)
                 expect(agent.instance_variable_get(:@sender_queue).size).to eq(1)
               end
+            end
+          end
+        end
+
+        if FORK_SUPPORTED
+          it "should automatically reconnect when forked when aggregation is enabled" do
+            Timecop.travel start_of_minute
+            agent.frequency = 10
+
+            agent.increment('fork_reconnect_test1', 1, 0, 1)
+            fork do
+              agent.increment('fork_reconnect_test2', 1, 0, 1) # triggers reconnect
+              exit
+            end
+
+
+            sleep 1
+            agent.increment('fork_reconnect_test3', 1, 0, 1) # triggers reconnect
+
+            agent.flush
+            expect(server.connect_count).to eq(2)
+
+            wait do
+              expect(server.commands).to include("increment fork_reconnect_test1 1 0 1")
+              expect(server.commands).to include("increment fork_reconnect_test2 1 0 1")
+              expect(server.commands).to include("increment fork_reconnect_test3 1 0 1")
+              expect(server.commands.grep(/fork_reconnect/).size).to eq(3)
             end
           end
         end
