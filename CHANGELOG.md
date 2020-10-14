@@ -1,3 +1,8 @@
+### 3.0.0 [October 13, 2020]
+* Fix some bugs discovered during beta testing
+* Substantially improve how the agent responds to forking
+* Note: the agent API has NOT changed.  This is a major release because of the significant changes in Ruby versions officially supported.
+
 ### 3.0.0.beta [October 8, 2020]
 * Drop support for outdated versions of Ruby
 * Explicitly add support for new versions of Ruby
